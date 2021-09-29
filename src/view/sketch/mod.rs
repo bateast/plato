@@ -46,6 +46,7 @@ pub struct Sketch {
     rect: Rectangle,
     children: Vec<Box<dyn View>>,
     pixmap: Pixmap,
+    background: Pixmap,
     random: Pixmap,
     fingers: FxHashMap<i32, TouchState>,
     pen: Pen,
@@ -82,6 +83,7 @@ impl Sketch {
             rect,
             children,
             pixmap: Pixmap::new(rect.width(), rect.height()),
+            background: Pixmap::new(rect.width(), rect.height()),
             random,
             fingers: FxHashMap::default(),
             pen: context.settings.sketch.pen.clone(),
@@ -111,6 +113,13 @@ impl Sketch {
                         .filter(|p| glob.is_match(p))
                         .collect();
             loadables.sort_by(|a, b| b.cmp(a));
+            let mut backgrounds: Vec<PathBuf> =
+                WalkDir::new(&self.save_path).min_depth(1).into_iter()
+                .filter_map(|e| e.ok().filter(|e| !e.is_hidden())
+                            .and_then(|e| e.path().file_name().map(PathBuf::from)))
+                .filter(|p| glob.is_match(p))
+                .collect();
+            backgrounds.sort_by(|a, b| b.cmp(a));
 
             let mut sizes = vec![
                 EntryKind::CheckBox("Dynamic".to_string(),
@@ -160,6 +169,14 @@ impl Sketch {
                         EntryKind::Command(e.to_string_lossy().into_owned(),
                                            EntryId::Load(e))).collect()));
             }
+            if !backgrounds.is_empty() {
+                entries.insert(entries.len() - 1,
+                               EntryKind::SubMenu("Load Background".to_string(),
+                                                  backgrounds.into_iter()
+                                                  .map(|e|
+                                                       EntryKind::Command(e.to_string_lossy().into_owned(),
+                                                                          EntryId::LoadBackground(e))).collect()));
+            }
 
             let sketch_menu = Menu::new(rect, ViewId::SketchMenu, MenuKind::Contextual, entries, context);
             rq.add(RenderData::new(sketch_menu.id(), *sketch_menu.rect(), UpdateMode::Gui));
@@ -172,6 +189,15 @@ impl Sketch {
         let decoder = png::Decoder::new(File::open(path)?);
         let mut reader = decoder.read_info()?;
         reader.next_frame(self.pixmap.data_mut())?;
+        self.filename = filename.to_string_lossy().into_owned();
+        Ok(())
+    }
+
+    fn load_background(&mut self, filename: &PathBuf) -> Result<(), Error> {
+        let path = self.save_path.join(filename);
+        let decoder = png::Decoder::new(File::open(path)?);
+        let mut reader = decoder.read_info()?;
+        reader.next_frame(self.background.data_mut())?;
         self.filename = filename.to_string_lossy().into_owned();
         Ok(())
     }
@@ -274,6 +300,16 @@ impl View for Sketch {
                 }
                 true
             },
+            Event::Select(EntryId::LoadBackground(ref name)) => {
+                if let Err(e) = self.load_background(name) {
+                    let msg = format!("Couldn't load sketch: {}).", e);
+                    let notif = Notification::new(msg, hub, rq, context);
+                    self.children.push(Box::new(notif) as Box<dyn View>);
+                } else {
+                    rq.add(RenderData::new(self.id, self.rect, UpdateMode::Gui));
+                }
+                true
+            },
             Event::Select(EntryId::Refresh) => {
                 rq.add(RenderData::new(self.id, self.rect, UpdateMode::Full));
                 true
@@ -311,7 +347,10 @@ impl View for Sketch {
     }
 
     fn render(&self, fb: &mut dyn Framebuffer, rect: Rectangle, _fonts: &mut Fonts) {
-        fb.draw_framed_pixmap_halftone(&self.pixmap, &self.random, &rect, rect.min);
+        let stack = [(&self.pixmap,1), (&self.background,1)];
+        fb.draw_stacked_framed_pixmap(&stack, &rect, rect.min);
+
+        // fb.draw_framed_pixmap_halftone(&self.pixmap, &self.random, &rect, rect.min);
     }
 
     fn render_rect(&self, rect: &Rectangle) -> Rectangle {

@@ -490,6 +490,7 @@ pub enum EntryId {
     SystemInfo,
     LoadLibrary(usize),
     Load(PathBuf),
+    LoadBackground(PathBuf),
     Flush,
     Save,
     Import,
