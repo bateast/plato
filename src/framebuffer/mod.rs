@@ -16,6 +16,8 @@ pub use self::kobo1::KoboFramebuffer1;
 pub use self::kobo2::KoboFramebuffer2;
 pub use self::image::Pixmap;
 
+pub type PixmapsStack<'a> = [(&'a Pixmap, u8)];
+
 #[derive(Debug, Copy, Clone)]
 pub struct Display {
     pub dims: (u32, u32),
@@ -179,16 +181,28 @@ pub trait Framebuffer {
                 let py = y - rect.min.y + pt.y;
                 let addr = (y * pixmap.width as i32 + x) as usize;
                 let source_color = pixmap.data[addr];
-                let color = if source_color == BLACK {
-                    BLACK
-                } else if source_color == WHITE {
-                    WHITE
-                } else {
-                    let rnd_color = random.data[addr];
-                    255 * (rnd_color < source_color) as u8
+                let color = match source_color {
+                    BLACK | WHITE => source_color,
+                    _ => 255 * (random.data[addr] < source_color) as u8
+                    // let color = 255 * (pixmap.data[addr] / 255);
                 };
-                // let color = 255 * (pixmap.data[addr] / 255);
                 self.set_pixel(px as u32, py as u32, color);
+            }
+        }
+    }
+
+    fn draw_stacked_framed_pixmap(&mut self, pixmaps: &PixmapsStack, rect: &Rectangle, pt: Point) {
+        for y in rect.min.y..rect.max.y {
+            for x in rect.min.x..rect.max.x {
+                let px = x - rect.min.x + pt.x;
+                let py = y - rect.min.y + pt.y;
+                let mut inv_blended_color = (255 - WHITE) as f32;
+                for (pixmap, alpha) in pixmaps {
+                    let addr = (y * pixmap.width as i32 + x) as usize;
+                    let inv_color = 255. - pixmap.data[addr] as f32;
+                    inv_blended_color = inv_blended_color + lerp((255 - WHITE) as f32, inv_color as f32, *alpha as f32);
+                }
+                self.set_pixel(px as u32, py as u32, 255 - (inv_blended_color as u8));
             }
         }
     }
@@ -200,7 +214,8 @@ pub trait Framebuffer {
                 let py = y + pt.y as u32;
                 let addr = (y * pixmap.width + x) as usize;
                 let alpha = (255.0 - pixmap.data[addr] as f32) / 255.0;
-                self.set_blended_pixel(px as u32, py as u32, color, alpha);
+                self.
+                    set_blended_pixel(px as u32, py as u32, color, alpha);
             }
         }
     }
