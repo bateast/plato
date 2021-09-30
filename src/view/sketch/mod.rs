@@ -348,8 +348,11 @@ impl View for Sketch {
 
     fn render(&self, fb: &mut dyn Framebuffer, rect: Rectangle, _fonts: &mut Fonts) {
         let stack = [(&self.pixmap,1), (&self.background,1)];
-        fb.draw_stacked_framed_pixmap(&stack, &rect, rect.min);
-
+        if rect == self.rect {
+            fb.draw_stacked_framed_pixmap(&stack, &rect, rect.min);
+        } else {
+            fb.draw_stacked_framed_pixmap_halftone(&stack, &self.random, &rect, rect.min);
+        }
         // fb.draw_framed_pixmap_halftone(&self.pixmap, &self.random, &rect, rect.min);
     }
 
