@@ -48,7 +48,7 @@ pub struct Sketch {
     pixmap: Pixmap,
     background: Pixmap,
     random: Pixmap,
-    fingers: FxHashMap<i32, TouchState>,
+    fingers: FxHashMap<i32, Vec<TouchState>>,
     pen: Pen,
     save_path: PathBuf,
     filename: String,
@@ -221,7 +221,7 @@ impl Sketch {
 }
 
 #[inline]
-fn draw_segment(pixmap: &mut Pixmap, ts: &mut TouchState, position: Point, time: f64, pen: &Pen, id: Id, fb_rect: &Rectangle, rq: &mut RenderQueue) {
+fn draw_segment(pixmap: &mut Pixmap, ts: &TouchState, position: Point, time: f64, pen: &Pen, id: Id, fb_rect: &Rectangle, rq: &mut RenderQueue) {
     let (start_radius, end_radius) = if pen.dynamic {
         if time > ts.time {
             let d = vec2!((position.x - ts.pt.x) as f32,
@@ -245,12 +245,19 @@ fn draw_segment(pixmap: &mut Pixmap, ts: &mut TouchState, position: Point, time:
     pixmap.draw_segment(ts.pt, position, start_radius, end_radius, pen.color);
 
     if let Some(render_rect) = rect.intersection(fb_rect) {
+        rq.add(RenderData::no_wait(id, render_rect, UpdateMode::Full));
+    }
+}
+
+#[inline]
+fn draw_fast_segment(pixmap: &mut Pixmap, ts: &TouchState, position: Point, time: f64, pen: &Pen, id: Id, fb_rect: &Rectangle, rq: &mut RenderQueue) {
+
+    pixmap.draw_segment(ts.pt, position, 0.5, 0.5, pen.color);
+
+    let rect = Rectangle::from_segment(ts.pt, position, 1, 1);
+    if let Some(render_rect) = rect.intersection(fb_rect) {
         rq.add(RenderData::no_wait(id, render_rect, UpdateMode::FastMono));
     }
-
-    ts.pt = position;
-    ts.time = time;
-    ts.radius = end_radius;
 }
 
 impl View for Sketch {
@@ -258,18 +265,32 @@ impl View for Sketch {
         match *evt {
             Event::Device(DeviceEvent::Finger { status: FingerStatus::Motion, id, position, time }) => {
                 if let Some(ts) = self.fingers.get_mut(&id) {
-                    draw_segment(&mut self.pixmap, ts, position, time, &self.pen, self.id, &self.rect, rq);
+
+                    if let Some(last) = ts.last() {
+                        draw_fast_segment(&mut self.pixmap, last, position, time, &self.pen, self.id, &self.rect, rq);
+                    }
+
+                    let radius = self.pen.size as f32 / 2.0;
+                    ts.push(TouchState::new(position, time, radius));
                 }
                 true
             },
             Event::Device(DeviceEvent::Finger { status: FingerStatus::Down, id, position, time }) => {
                 let radius = self.pen.size as f32 / 2.0;
-                self.fingers.insert(id, TouchState::new(position, time, radius));
+                self.fingers.insert(id, vec![TouchState::new(position, time, radius)]);
                 true
             },
             Event::Device(DeviceEvent::Finger { status: FingerStatus::Up, id, position, time }) => {
                 if let Some(ts) = self.fingers.get_mut(&id) {
-                    draw_segment(&mut self.pixmap, ts, position, time, &self.pen, self.id, &self.rect, rq);
+                    let (mut current_position, mut current_time) = (position, time);
+                    let mut last_element = ts.pop();
+                    while let Some(last) = last_element {
+                        draw_segment(&mut self.pixmap, &last, current_position, current_time, &self.pen, self.id, &self.rect, rq);
+
+                        current_position = last.pt;
+                        current_time = last.time;
+                        last_element = ts.pop();
+                    }
                 }
                 self.fingers.remove(&id);
                 true
