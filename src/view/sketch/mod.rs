@@ -41,6 +41,13 @@ impl TouchState {
     }
 }
 
+#[derive(PartialEq)]
+pub enum SketchMode {
+    OneFinger,
+    Fast,
+    Full,
+}
+
 pub struct Sketch {
     id: Id,
     rect: Rectangle,
@@ -48,7 +55,11 @@ pub struct Sketch {
     pixmap: Pixmap,
     background: Pixmap,
     random: Pixmap,
+    mode: SketchMode,
     fingers: FxHashMap<i32, Vec<TouchState>>,
+    one_finger: Vec<TouchState>,
+    one_finger_id: i32,
+    drawing: bool,
     pen: Pen,
     save_path: PathBuf,
     filename: String,
@@ -85,7 +96,11 @@ impl Sketch {
             pixmap: Pixmap::new(rect.width(), rect.height()),
             background: Pixmap::new(rect.width(), rect.height()),
             random,
+            mode: SketchMode::OneFinger,
             fingers: FxHashMap::default(),
+            one_finger: Vec::new(),
+            one_finger_id : -1,
+            drawing: false,
             pen: context.settings.sketch.pen.clone(),
             save_path,
             filename: Local::now().format(FILENAME_PATTERN).to_string(),
@@ -250,7 +265,7 @@ fn draw_segment(pixmap: &mut Pixmap, ts: &TouchState, position: Point, time: f64
 }
 
 #[inline]
-fn draw_fast_segment(pixmap: &mut Pixmap, ts: &TouchState, position: Point, time: f64, pen: &Pen, id: Id, fb_rect: &Rectangle, rq: &mut RenderQueue) {
+fn draw_fast_segment(pixmap: &mut Pixmap, ts: &TouchState, position: Point, pen: &Pen, id: Id, fb_rect: &Rectangle, rq: &mut RenderQueue) {
 
     pixmap.draw_segment(ts.pt, position, 0.5, 0.5, pen.color);
 
@@ -264,24 +279,50 @@ impl View for Sketch {
     fn handle_event(&mut self, evt: &Event, hub: &Hub, _bus: &mut Bus, rq: &mut RenderQueue, context: &mut Context) -> bool {
         match *evt {
             Event::Device(DeviceEvent::Finger { status: FingerStatus::Motion, id, position, time }) => {
-                if let Some(ts) = self.fingers.get_mut(&id) {
-
-                    if let Some(last) = ts.last() {
-                        draw_fast_segment(&mut self.pixmap, last, position, time, &self.pen, self.id, &self.rect, rq);
+                if self.drawing
+                {
+                    if let Some(ts) =
+                        match self.mode {
+                            SketchMode::OneFinger if id == self.one_finger_id => Some(&mut self.one_finger),
+                            SketchMode::OneFinger => None,
+                            _ => self.fingers.get_mut(&id),
+                        }
+                    {
+                        if let Some(last) = ts.last() {
+                            match self.mode {
+                                SketchMode::OneFinger | SketchMode::Fast =>
+                                    draw_fast_segment(&mut self.pixmap, last, position, &self.pen, self.id, &self.rect, rq),
+                                SketchMode::Full =>
+                                    draw_segment(&mut self.pixmap, last, position, time, &self.pen, self.id, &self.rect, rq),
+                            }
+                        }
+                        let radius = self.pen.size as f32 / 2.0;
+                        ts.push(TouchState::new(position, time, radius));
                     }
-
-                    let radius = self.pen.size as f32 / 2.0;
-                    ts.push(TouchState::new(position, time, radius));
                 }
                 true
             },
             Event::Device(DeviceEvent::Finger { status: FingerStatus::Down, id, position, time }) => {
                 let radius = self.pen.size as f32 / 2.0;
-                self.fingers.insert(id, vec![TouchState::new(position, time, radius)]);
+                match self.mode {
+                    SketchMode::OneFinger => {
+                        self.one_finger = vec![TouchState::new(position, time, radius)];
+                        self.one_finger_id = id;
+                    },
+                    _ => {
+                        self.fingers.insert(id, vec![TouchState::new(position, time, radius)]);
+                    },
+                };
+                self.drawing = true;
                 true
             },
             Event::Device(DeviceEvent::Finger { status: FingerStatus::Up, id, position, time }) => {
-                if let Some(ts) = self.fingers.get_mut(&id) {
+                if let Some(ts) = match self.mode {
+                    SketchMode::OneFinger if id == self.one_finger_id => Some(&mut self.one_finger),
+                    SketchMode::OneFinger => None,
+                    _ => self.fingers.get_mut(&id),
+                }
+                {
                     let (mut current_position, mut current_time) = (position, time);
                     let mut last_element = ts.pop();
                     while let Some(last) = last_element {
@@ -292,7 +333,11 @@ impl View for Sketch {
                         last_element = ts.pop();
                     }
                 }
-                self.fingers.remove(&id);
+                self.drawing = match self.mode {
+                    SketchMode::OneFinger if id == self.one_finger_id => false,
+                    SketchMode::OneFinger => self.drawing,
+                    _ => { self.fingers.remove(&id); self.fingers.is_empty() }
+                };
                 true
             },
             Event::ToggleNear(ViewId::TitleMenu, rect) => {
@@ -369,12 +414,12 @@ impl View for Sketch {
 
     fn render(&self, fb: &mut dyn Framebuffer, rect: Rectangle, _fonts: &mut Fonts) {
         let stack = [(&self.pixmap,1), (&self.background,1)];
-        if rect == self.rect {
+        if (! self.drawing) || self.mode == SketchMode::Full 
+        {
             fb.draw_stacked_framed_pixmap(&stack, &rect, rect.min);
         } else {
             fb.draw_stacked_framed_pixmap_halftone(&stack, &self.random, &rect, rect.min);
         }
-        // fb.draw_framed_pixmap_halftone(&self.pixmap, &self.random, &rect, rect.min);
     }
 
     fn render_rect(&self, rect: &Rectangle) -> Rectangle {
