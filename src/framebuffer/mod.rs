@@ -198,9 +198,11 @@ pub trait Framebuffer {
                 let py = y - rect.min.y + pt.y;
                 let mut inv_blended_color = (255 - WHITE) as f32;
                 for (pixmap, alpha) in pixmaps {
-                    let addr = (y * pixmap.width as i32 + x) as usize;
-                    let inv_color = 255. - pixmap.data[addr] as f32;
-                    inv_blended_color = inv_blended_color + lerp((255 - WHITE) as f32, inv_color as f32, *alpha as f32);
+                    if pixmap.rect().includes(Point{x: x, y: y}){
+                        let addr = (y * pixmap.width as i32 + x) as usize;
+                        let inv_color = 255. - pixmap.data[addr] as f32;
+                        inv_blended_color = inv_blended_color + lerp((255 - WHITE) as f32, inv_color as f32, *alpha as f32);
+                    }
                 }
                 // let color = 255 - (inv_blended_color as u8);
                 let color = {
@@ -223,10 +225,12 @@ pub trait Framebuffer {
                 let py = y - rect.min.y + pt.y;
                 let mut blended_color = WHITE as f32;
                 for (pixmap, alpha) in pixmaps {
-                    let addr = (y * pixmap.width as i32 + x) as usize;
-                    let color = pixmap.data[addr] as f32;
-                    blended_color = blended_color - *alpha as f32 * (255. - color);
-                    // blended_color = 255. - (255. - blended_color) - lerp(BLACK as f32, 255. - color, *alpha as f32);
+                    if pixmap.rect().includes(Point{x: x, y: y}){
+                        let addr = (y * pixmap.width as i32 + x) as usize;
+                        let color = pixmap.data[addr] as f32;
+                        blended_color = blended_color - *alpha as f32 * (255. - color);
+                        // blended_color = 255. - (255. - blended_color) - lerp(BLACK as f32, 255. - color, *alpha as f32);
+}
                 }
                 let blended_color = blended_color as u8;
                 self.set_pixel(px as u32, py as u32, blended_color);

@@ -23,6 +23,12 @@ use crate::font::Fonts;
 use crate::unit::scale_by_dpi;
 use crate::color::{BLACK, WHITE};
 use crate::app::Context;
+use crate::document;
+use document::{Document, Location};
+
+// TODO:
+// * svg
+// * handwritting recognition (myscript.com ?)
 
 const FILENAME_PATTERN: &str = "sketch-%Y%m%d_%H%M%S.png";
 const ICON_NAME: &str = "enclosed_menu";
@@ -54,6 +60,7 @@ pub struct Sketch {
     children: Vec<Box<dyn View>>,
     pixmap: Pixmap,
     background: Pixmap,
+    background_doc: Option<Box<dyn Document>>,
     random: Pixmap,
     mode: SketchMode,
     fingers: FxHashMap<i32, Vec<TouchState>>,
@@ -95,6 +102,7 @@ impl Sketch {
             children,
             pixmap: Pixmap::new(rect.width(), rect.height()),
             background: Pixmap::new(rect.width(), rect.height()),
+            background_doc : None,
             random,
             mode: SketchMode::OneFinger,
             fingers: FxHashMap::default(),
@@ -123,16 +131,15 @@ impl Sketch {
             let glob = Glob::new("**/*.png").unwrap().compile_matcher();
             let mut loadables: Vec<PathBuf> =
                 WalkDir::new(&self.save_path).min_depth(1).into_iter()
-                        .filter_map(|e| e.ok().filter(|e| !e.is_hidden())
-                                         .and_then(|e| e.path().file_name().map(PathBuf::from)))
-                        .filter(|p| glob.is_match(p))
-                        .collect();
-            loadables.sort_by(|a, b| b.cmp(a));
-            let mut backgrounds: Vec<PathBuf> =
-                WalkDir::new(&self.save_path).min_depth(1).into_iter()
                 .filter_map(|e| e.ok().filter(|e| !e.is_hidden())
                             .and_then(|e| e.path().file_name().map(PathBuf::from)))
                 .filter(|p| glob.is_match(p))
+                .collect();
+            loadables.sort_by(|a, b| b.cmp(a));
+            let mut backgrounds: Vec<PathBuf> = WalkDir::new(
+                context.library.home.join(&context.settings.sketch.background_path)).min_depth(1)
+                .into_iter().filter_map(|e| e.ok().filter(|e| !e.is_hidden())
+                                        .and_then(|e| e.path().file_name().map(PathBuf::from)))
                 .collect();
             backgrounds.sort_by(|a, b| b.cmp(a));
 
@@ -184,14 +191,16 @@ impl Sketch {
                         EntryKind::Command(e.to_string_lossy().into_owned(),
                                            EntryId::Load(e))).collect()));
             }
-            if !backgrounds.is_empty() {
-                entries.insert(entries.len() - 1,
-                               EntryKind::SubMenu("Load Background".to_string(),
-                                                  backgrounds.into_iter()
-                                                  .map(|e|
-                                                       EntryKind::Command(e.to_string_lossy().into_owned(),
-                                                                          EntryId::LoadBackground(e))).collect()));
-            }
+
+            let mut backgrounds_menu = vec!(EntryKind::Command("☒ Clear".to_string(), EntryId::ClearBackground));
+            backgrounds_menu.push(EntryKind::Separator);
+            backgrounds.into_iter().for_each(|e|
+                                            backgrounds_menu.push(
+                                                EntryKind::Command(e.to_string_lossy().into_owned(),
+                                                                   EntryId::LoadBackground(e))));
+            entries.insert(entries.len() - 1,
+                           EntryKind::SubMenu("Load Background".to_string(), backgrounds_menu));
+
 
             let sketch_menu = Menu::new(rect, ViewId::SketchMenu, MenuKind::Contextual, entries, context);
             rq.add(RenderData::new(sketch_menu.id(), *sketch_menu.rect(), UpdateMode::Gui));
@@ -209,11 +218,19 @@ impl Sketch {
     }
 
     fn load_background(&mut self, filename: &PathBuf) -> Result<(), Error> {
-        let path = self.save_path.join(filename);
-        let decoder = png::Decoder::new(File::open(path)?);
-        let mut reader = decoder.read_info()?;
-        reader.next_frame(self.background.data_mut())?;
-        self.filename = filename.to_string_lossy().into_owned();
+        let path = dbg! (self.save_path.join(filename));
+        // let decoder = png::Decoder::new(File::open(path)?);
+        // let mut reader = decoder.read_info()?;
+        // reader.next_frame(self.background.data_mut())?;
+        self.background_doc = document::open(path);
+        if let Some(boxed_background) = &mut self.background_doc {
+            dbg! ("document openned");
+            let option_pixmap = boxed_background.pixmap (Location::Exact(0), 1.);
+            if let Some((pixmap, _)) = option_pixmap {
+                dbg! ("pixmap created");
+                self.background = pixmap;
+            }
+        };
         Ok(())
     }
 
@@ -260,7 +277,7 @@ fn draw_segment(pixmap: &mut Pixmap, ts: &TouchState, position: Point, time: f64
     pixmap.draw_segment(ts.pt, position, start_radius, end_radius, pen.color);
 
     if let Some(render_rect) = rect.intersection(fb_rect) {
-        rq.add(RenderData::no_wait(id, render_rect, UpdateMode::Full));
+        rq.add(RenderData::no_wait(id, render_rect, UpdateMode::Fast));
     }
 }
 
@@ -368,12 +385,17 @@ impl View for Sketch {
             },
             Event::Select(EntryId::LoadBackground(ref name)) => {
                 if let Err(e) = self.load_background(name) {
-                    let msg = format!("Couldn't load sketch: {}).", e);
+                    let msg = format!("Couldn't background sketch: {}).", e);
                     let notif = Notification::new(msg, hub, rq, context);
                     self.children.push(Box::new(notif) as Box<dyn View>);
                 } else {
                     rq.add(RenderData::new(self.id, self.rect, UpdateMode::Gui));
                 }
+                true
+            },
+            Event::Select(EntryId::ClearBackground) => {
+                self.background = Pixmap::new(self.rect.width(), self.rect.height());
+                self.background_doc = None;
                 true
             },
             Event::Select(EntryId::Refresh) => {
