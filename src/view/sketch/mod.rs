@@ -136,12 +136,16 @@ impl Sketch {
                 .filter(|p| glob.is_match(p))
                 .collect();
             loadables.sort_by(|a, b| b.cmp(a));
-            let mut backgrounds: Vec<PathBuf> = WalkDir::new(
-                context.library.home.join(&context.settings.sketch.background_path)).min_depth(1)
-                .into_iter().filter_map(|e| e.ok().filter(|e| !e.is_hidden())
-                                        .and_then(|e| e.path().file_name().map(PathBuf::from)))
+            let mut backgrounds: Vec<(PathBuf, PathBuf)> = WalkDir::new(
+                context.library.home.join(&context.settings.sketch.background_path))
+                .sort_by_file_name()
+                .min_depth(1)
+                .into_iter()
+                .filter_map(|e| e.ok().filter(|e| e.file_type().is_file())
+//                            .and_then(|e| e.path().file_name().map(PathBuf::from)))
+                            .and_then(|e| if let Some(f) = e.path().file_name() {Some((PathBuf::from(f), PathBuf::from(e.path())))} else {None})
+                            )
                 .collect();
-            backgrounds.sort_by(|a, b| b.cmp(a));
 
             let mut sizes = vec![
                 EntryKind::CheckBox("Dynamic".to_string(),
@@ -194,9 +198,9 @@ impl Sketch {
 
             let mut backgrounds_menu = vec!(EntryKind::Command("☒ Clear".to_string(), EntryId::ClearBackground));
             backgrounds_menu.push(EntryKind::Separator);
-            backgrounds.into_iter().for_each(|e|
+            backgrounds.into_iter().for_each(|(f,e)|
                                             backgrounds_menu.push(
-                                                EntryKind::Command(e.to_string_lossy().into_owned(),
+                                                EntryKind::Command(f.to_string_lossy().into_owned(),
                                                                    EntryId::LoadBackground(e))));
             entries.insert(entries.len() - 1,
                            EntryKind::SubMenu("Load Background".to_string(), backgrounds_menu));
@@ -218,11 +222,10 @@ impl Sketch {
     }
 
     fn load_background(&mut self, filename: &PathBuf) -> Result<(), Error> {
-        let path = dbg! (self.save_path.join(filename));
         // let decoder = png::Decoder::new(File::open(path)?);
         // let mut reader = decoder.read_info()?;
         // reader.next_frame(self.background.data_mut())?;
-        self.background_doc = document::open(path);
+        self.background_doc = document::open(filename);
         if let Some(boxed_background) = &mut self.background_doc {
             dbg! ("document openned");
             let option_pixmap = boxed_background.pixmap (Location::Exact(0), 1.);
@@ -322,6 +325,7 @@ impl View for Sketch {
             Event::Device(DeviceEvent::Finger { status: FingerStatus::Down, id, position, time }) => {
                 let radius = self.pen.size as f32 / 2.0;
                 match self.mode {
+                    SketchMode::OneFinger if self.drawing => {},
                     SketchMode::OneFinger => {
                         self.one_finger = vec![TouchState::new(position, time, radius)];
                         self.one_finger_id = id;
