@@ -491,6 +491,7 @@ pub enum EntryId {
     LoadLibrary(usize),
     Load(PathBuf),
     LoadBackground(PathBuf),
+    ClearBackground,
     Flush,
     Save,
     Import,

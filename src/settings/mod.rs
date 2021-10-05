@@ -193,6 +193,7 @@ impl Default for DictionarySettings {
 #[serde(default, rename_all = "kebab-case")]
 pub struct SketchSettings {
     pub save_path: PathBuf,
+    pub background_path: PathBuf,
     pub notify_success: bool,
     pub pen: Pen,
 }
@@ -231,6 +232,7 @@ impl Default for SketchSettings {
     fn default() -> Self {
         SketchSettings {
             save_path: PathBuf::from("Sketches"),
+            background_path: PathBuf::from("Sketches/Backgrounds"),
             notify_success: true,
             pen: Pen::default(),
         }
