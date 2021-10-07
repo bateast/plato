@@ -299,6 +299,7 @@ impl View for Sketch {
     fn handle_event(&mut self, evt: &Event, hub: &Hub, _bus: &mut Bus, rq: &mut RenderQueue, context: &mut Context) -> bool {
         match *evt {
             Event::Device(DeviceEvent::Finger { status: FingerStatus::Motion, id, position, time }) => {
+                let corrected_position = position + Point{x: self.pen.offset_x, y: self.pen.offset_y};
                 if self.drawing
                 {
                     if let Some(ts) =
@@ -311,40 +312,42 @@ impl View for Sketch {
                         if let Some(last) = ts.last() {
                             match self.mode {
                                 SketchMode::OneFinger | SketchMode::Fast =>
-                                    draw_fast_segment(&mut self.pixmap, last, position, &self.pen, self.id, &self.rect, rq),
+                                    draw_fast_segment(&mut self.pixmap, last, corrected_position, &self.pen, self.id, &self.rect, rq),
                                 SketchMode::Full =>
-                                    draw_segment(&mut self.pixmap, last, position, time, &self.pen, self.id, &self.rect, rq),
+                                    draw_segment(&mut self.pixmap, last, corrected_position, time, &self.pen, self.id, &self.rect, rq),
                             }
                         }
                         let radius = self.pen.size as f32 / 2.0;
-                        ts.push(TouchState::new(position, time, radius));
+                        ts.push(TouchState::new(corrected_position, time, radius));
                     }
                 }
                 true
             },
             Event::Device(DeviceEvent::Finger { status: FingerStatus::Down, id, position, time }) => {
+                let corrected_position = position + Point{x: self.pen.offset_x, y: self.pen.offset_y};
                 let radius = self.pen.size as f32 / 2.0;
                 match self.mode {
                     SketchMode::OneFinger if self.drawing => {},
                     SketchMode::OneFinger => {
-                        self.one_finger = vec![TouchState::new(position, time, radius)];
+                        self.one_finger = vec![TouchState::new(corrected_position, time, radius)];
                         self.one_finger_id = id;
                     },
                     _ => {
-                        self.fingers.insert(id, vec![TouchState::new(position, time, radius)]);
+                        self.fingers.insert(id, vec![TouchState::new(corrected_position, time, radius)]);
                     },
                 };
                 self.drawing = true;
                 true
             },
             Event::Device(DeviceEvent::Finger { status: FingerStatus::Up, id, position, time }) => {
+                let corrected_position = position + Point{x: self.pen.offset_x, y: self.pen.offset_y};
                 if let Some(ts) = match self.mode {
                     SketchMode::OneFinger if id == self.one_finger_id => Some(&mut self.one_finger),
                     SketchMode::OneFinger => None,
                     _ => self.fingers.get_mut(&id),
                 }
                 {
-                    let (mut current_position, mut current_time) = (position, time);
+                    let (mut current_position, mut current_time) = (corrected_position, time);
                     let mut last_element = ts.pop();
                     while let Some(last) = last_element {
                         draw_segment(&mut self.pixmap, &last, current_position, current_time, &self.pen, self.id, &self.rect, rq);

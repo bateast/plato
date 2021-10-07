@@ -12,6 +12,7 @@ use crate::frontlight::LightLevels;
 use crate::color::BLACK;
 use crate::device::CURRENT_DEVICE;
 use crate::unit::mm_to_px;
+use crate::geom::Point;
 
 pub use self::preset::{LightPreset, guess_frontlight};
 
@@ -212,6 +213,8 @@ pub struct Pen {
     pub size: i32,
     pub dynamic: bool,
     pub color: u8,
+    pub offset_x: i32,
+    pub offset_y: i32,
     pub min_speed: f32,
     pub max_speed: f32,
 }
@@ -224,6 +227,8 @@ impl Default for Pen {
             dynamic: true,
             min_speed: mm_to_px(3.0, CURRENT_DEVICE.dpi),
             max_speed: mm_to_px(152.4, CURRENT_DEVICE.dpi),
+            offset_x: 0,
+            offset_y: 0,
         }
     }
 }
