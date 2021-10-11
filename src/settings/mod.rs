@@ -12,7 +12,6 @@ use crate::frontlight::LightLevels;
 use crate::color::BLACK;
 use crate::device::CURRENT_DEVICE;
 use crate::unit::mm_to_px;
-use crate::geom::Point;
 
 pub use self::preset::{LightPreset, guess_frontlight};
 
