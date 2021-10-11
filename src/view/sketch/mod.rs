@@ -17,7 +17,7 @@ use crate::view::{View, Event, Hub, Bus, RenderQueue, RenderData};
 use crate::view::{EntryKind, EntryId, ViewId, Id, ID_FEEDER};
 use crate::view::{SMALL_BAR_HEIGHT, BORDER_RADIUS_SMALL};
 use crate::framebuffer::{Framebuffer, UpdateMode, Pixmap};
-use crate::settings::{ImportSettings, Pen};
+use crate::settings::{ImportSettings, Pen, MyscriptSettings};
 use crate::helpers::IsHidden;
 use crate::font::Fonts;
 use crate::unit::scale_by_dpi;
@@ -37,7 +37,8 @@ const ICON_NAME: &str = "enclosed_menu";
 // https://oeis.org/A000041
 const PEN_SIZES: [i32; 12] = [1, 2, 3, 5, 7, 11, 15, 22, 30, 42, 56, 77];
 
-struct TouchState {
+#[derive(Clone)]
+pub struct TouchState {
     pt: Point,
     time: f64,
     radius: f32,
@@ -70,6 +71,8 @@ pub struct Sketch {
     one_finger_id: i32,
     drawing: bool,
     pen: Pen,
+    recorded_segments: Vec<Vec<TouchState>>,
+    myscript: MyscriptSettings,
     save_path: PathBuf,
     filename: String,
 }
@@ -112,6 +115,8 @@ impl Sketch {
             one_finger_id : -1,
             drawing: false,
             pen: context.settings.sketch.pen.clone(),
+            myscript: context.settings.myscript.clone(),
+            recorded_segments: Vec::new(),
             save_path,
             filename: Local::now().format(FILENAME_PATTERN).to_string(),
         }
@@ -349,6 +354,10 @@ impl View for Sketch {
                     _ => self.fingers.get_mut(&id),
                 }
                 {
+                    let mut record = ts.clone();
+                    record.push (TouchState::new(corrected_position, time, 0.));
+                    self.recorded_segments.push(record);
+
                     let (mut current_position, mut current_time) = (corrected_position, time);
                     let mut last_element = ts.pop();
                     while let Some(last) = last_element {
@@ -364,6 +373,12 @@ impl View for Sketch {
                     SketchMode::OneFinger => self.drawing,
                     _ => { self.fingers.remove(&id); self.fingers.is_empty() }
                 };
+
+                // if let Ok(json) = self.to_json() {
+                //     println! ("JSON {}", &json);
+                //     println! ("Auth {}", myscript::compute_hmac(&self.myscript.application_key, &self.myscript.hmac_key, json));
+                // }
+
                 true
             },
             Event::ToggleNear(ViewId::TitleMenu, rect) => {
