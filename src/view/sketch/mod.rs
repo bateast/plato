@@ -26,6 +26,8 @@ use crate::app::Context;
 use crate::document;
 use document::{Document, Location};
 
+mod myscript;
+
 // TODO:
 // * svg
 // * handwritting recognition (myscript.com ?)
