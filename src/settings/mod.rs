@@ -119,6 +119,7 @@ pub struct Settings {
     pub import: ImportSettings,
     pub dictionary: DictionarySettings,
     pub sketch: SketchSettings,
+    pub myscript: MyscriptSettings,
     pub calculator: CalculatorSettings,
     pub battery: BatterySettings,
     pub frontlight_levels: LightLevels,
@@ -196,6 +197,23 @@ pub struct SketchSettings {
     pub background_path: PathBuf,
     pub notify_success: bool,
     pub pen: Pen,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct MyscriptSettings {
+    pub lang: String,
+    pub application_key: String,
+    pub hmac_key: String,
+}
+impl Default for MyscriptSettings {
+    fn default() -> Self {
+        MyscriptSettings {
+            lang: "en_US".to_string(),
+            application_key: "".to_string(),
+            hmac_key: "".to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -501,6 +519,7 @@ impl Default for Settings {
             import: ImportSettings::default(),
             dictionary: DictionarySettings::default(),
             sketch: SketchSettings::default(),
+            myscript: MyscriptSettings::default(),
             calculator: CalculatorSettings::default(),
             battery: BatterySettings::default(),
             frontlight_levels: LightLevels::default(),
