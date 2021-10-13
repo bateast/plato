@@ -45,7 +45,7 @@ impl Stroke {
         for ts in record.iter(){
             stroke.x.push(ts.pt.x);
             stroke.y.push(ts.pt.y);
-            stroke.t.push((ts.time * 1e6) as i64);
+            stroke.t.push((ts.time * 1e3) as i64);
         };
         stroke
     }
