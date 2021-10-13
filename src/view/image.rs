@@ -34,8 +34,12 @@ impl View for Image {
     }
 
     fn render(&self, fb: &mut dyn Framebuffer, rect: Rectangle, _fonts: &mut Fonts) {
-        let x0 = self.rect.min.x + (self.rect.width() - self.pixmap.width) as i32 / 2;
-        let y0 = self.rect.min.y + (self.rect.height() - self.pixmap.height) as i32 / 2;
+        let x0 = if self.rect.width() > self.pixmap.width {
+            self.rect.min.x + (self.rect.width() - self.pixmap.width) as i32 / 2
+        } else {self.rect.min.x as i32 / 2 };
+        let y0 = if self.rect.height() > self.pixmap.height {
+            self.rect.min.y + (self.rect.height() - self.pixmap.height) as i32 / 2
+        } else {self.rect.min.y as i32 / 2};
         let x1 = x0 + self.pixmap.width as i32;
         let y1 = y0 + self.pixmap.height as i32;
         if let Some(r) = rect![self.rect.min, pt!(x1, y0)].intersection(&rect) {

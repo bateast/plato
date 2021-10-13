@@ -389,6 +389,7 @@ pub enum ViewId {
     MarginCropperMenu,
     SearchMenu,
     SketchMenu,
+    SketchBackground,
     RenameDocument,
     RenameDocumentInput,
     GoToPage,

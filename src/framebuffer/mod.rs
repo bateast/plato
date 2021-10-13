@@ -149,6 +149,19 @@ pub trait Framebuffer {
         }
     }
 
+    fn draw_framed_pixmap_blended(&mut self, pixmap: &Pixmap, rect: &Rectangle, pt: Point, color: u8) {
+        for y in rect.min.y..rect.max.y {
+            for x in rect.min.x..rect.max.x {
+                let px = x - rect.min.x + pt.x;
+                let py = y - rect.min.y + pt.y;
+                let addr = (y * pixmap.width as i32 + x) as usize;
+                let alpha = (255.0 - pixmap.data[addr] as f32) / 255.0;
+                self.
+                    set_blended_pixel(px as u32, py as u32, color, alpha);
+            }
+        }
+    }
+
     fn draw_framed_pixmap_contrast(&mut self, pixmap: &Pixmap, rect: &Rectangle, pt: Point, exponent: f32, gray: f32) {
         if (exponent - 1.0).abs() < f32::EPSILON {
             self.draw_framed_pixmap(pixmap, rect, pt);
