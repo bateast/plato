@@ -137,8 +137,8 @@ impl Sketch {
     pub fn to_json(&self) -> Result<String> {
         let dpi = CURRENT_DEVICE.dpi;
         let mut batch = BatchInput {
-            width : self.pixmap.width,
-            height:	self.pixmap.height,
+            width : self.rect.width(),
+            height:	self.rect.height(),
             content_type: ContentType::Text,
             conversion_state: ConversionState::DigitalEdit,
             theme: "".to_string(),

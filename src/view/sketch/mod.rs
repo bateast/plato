@@ -13,7 +13,7 @@ use crate::view::icon::{Icon, ICONS_PIXMAPS};
 use crate::view::notification::Notification;
 use crate::view::image::Image;
 use crate::view::menu::{Menu, MenuKind};
-use crate::view::common::{locate_by_id};
+use crate::view::common::{locate_by_id, locate};
 use crate::view::{View, Event, Hub, Bus, RenderQueue, RenderData};
 use crate::view::{EntryKind, EntryId, ViewId, Id, ID_FEEDER};
 use crate::view::{SMALL_BAR_HEIGHT, BORDER_RADIUS_SMALL};
@@ -39,7 +39,7 @@ const ICON_PEN: &str = "pen";
 // https://oeis.org/A000041
 const PEN_SIZES: [i32; 12] = [1, 2, 3, 5, 7, 11, 15, 22, 30, 42, 56, 77];
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct TouchState {
     pt: Point,
     time: f64,
@@ -59,45 +59,59 @@ pub enum SketchMode {
     Full,
 }
 
+fn load(filename: &PathBuf) -> Option<Pixmap> {
+    let mut opt_doc = document::open(filename);
+    if let Some(boxed_doc) = &mut opt_doc {
+        let opt_pixmap = boxed_doc.pixmap(Location::Exact(0),1.);
+        if let Some((pixmap, _)) = opt_pixmap {
+            Some(pixmap)
+        }
+        else {
+            None
+        }
+    } else {
+        None
+    }
+
+}
+
+fn list(path: PathBuf) -> Vec<(PathBuf, PathBuf)> {
+    WalkDir::new(path)
+        .sort_by_file_name()
+        .min_depth(1)
+        .into_iter()
+        .filter_map(|e| e.ok().filter(|e| e.file_type().is_file())
+                    .and_then(|e| if let Some(f) = e.path().file_name()
+                              {Some((PathBuf::from(f), PathBuf::from(e.path())))}
+                              else {None}))
+        .collect()
+}
+
 struct Background {
+    rect: Rectangle,
     image: Image,
-    random: Pixmap,
-    doc: Option<Box<dyn Document>>,
     drawing : bool,
 }
 
 impl Background {
 
-    pub fn new(rect: Rectangle, random: &Pixmap) -> Background {
+    pub fn new(rect: Rectangle) -> Background {
+        let mut pixmap = Pixmap::new(rect.width(), rect.height());
+        pixmap.clear(WHITE);
         Background {
-            image: Image::new(rect, Pixmap::new(rect.width(), rect.height())),
-            random : random.clone(),
-            doc : None,
+            rect,
+            image: Image::new(rect, pixmap),
             drawing : false,
         }
     }
 
-    pub fn list(context: &mut Context) -> Vec<(PathBuf, PathBuf)> {
-        WalkDir::new(
-            context.library.home.join(&context.settings.sketch.background_path))
-            .sort_by_file_name()
-            .min_depth(1)
-            .into_iter()
-            .filter_map(|e| e.ok().filter(|e| e.file_type().is_file())
-                        .and_then(|e| if let Some(f) = e.path().file_name()
-                                  {Some((PathBuf::from(f), PathBuf::from(e.path())))}
-                                  else {None}))
-            .collect()
-    }
-
     pub fn load(&mut self, filename: &PathBuf, rq: &mut RenderQueue) -> Result<(), Error> {
-        self.doc = document::open(filename);
-        if let Some(boxed_background) = &mut self.doc {
-            let option_pixmap = boxed_background.pixmap (Location::Exact(0), 1.);
-            if let Some((pixmap, _)) = option_pixmap {
-                self.image.update(pixmap, rq);
-            }
-        };
+        let mut pixmap = Pixmap::new(self.rect.width(), self.rect.height());
+        pixmap.clear(WHITE);
+        if let Some(new_pixmap) = load(filename) {
+            pixmap.draw_pixmap(&new_pixmap, self.rect.min);
+            self.image.update(pixmap, rq);
+        }
         Ok(())
     }
 
@@ -122,7 +136,7 @@ impl View for Background {
         false
     }
     fn rect(&self) -> &Rectangle {
-        self.image.rect()
+        View::rect(&self.image)
     }
     fn rect_mut(&mut self) -> &mut Rectangle{
         self.image.rect_mut()
@@ -144,7 +158,7 @@ impl View for Background {
         false
     }
     fn is_background(&self) -> bool {
-        false
+        true
     }
 }
 
@@ -152,8 +166,8 @@ pub struct Sketch {
     id: Id,
     rect: Rectangle,
     children: Vec<Box<dyn View>>,
-    pixmap: Pixmap,
     random: Pixmap,
+    image:Image,
     mode: SketchMode,
     fingers: FxHashMap<i32, Vec<TouchState>>,
     one_finger: Vec<TouchState>,
@@ -170,10 +184,13 @@ impl Sketch {
     pub fn new(rect: Rectangle, rq: &mut RenderQueue, context: &mut Context) -> Sketch {
         let id = ID_FEEDER.next();
         let mut children = Vec::new();
+        children.push(Box::new(Background::new(rect)) as Box<dyn View>);
         let dpi = CURRENT_DEVICE.dpi;
         let small_height = scale_by_dpi(SMALL_BAR_HEIGHT, dpi) as i32;
         let border_radius = scale_by_dpi(BORDER_RADIUS_SMALL, dpi) as i32;
         let pixmap = &ICONS_PIXMAPS[ICON_NAME];
+        let image = Image::new(rect, Pixmap::new(rect.width(), rect.height()));
+        children.push(Box::new(image));
         let icon_padding = (small_height - pixmap.width.max(pixmap.height) as i32) / 2;
         let width = pixmap.width as i32 + icon_padding;
         let height = pixmap.height as i32 + icon_padding;
@@ -195,14 +212,14 @@ impl Sketch {
         children.push(Box::new(icon) as Box<dyn View>);
         let save_path = context.library.home.join(&context.settings.sketch.save_path);
         rq.add(RenderData::new(id, rect, UpdateMode::Full));
-        let mut random : Pixmap = Pixmap::new(rect.width(), rect.height());
+        let mut random = Pixmap::new(rect.width(), rect.height());
         context.rng.fill_bytes(random.data_mut());
         Sketch {
             id,
             rect,
             children,
-            pixmap: Pixmap::new(rect.width(), rect.height()),
             random,
+            image:Image::new(rect, Pixmap::new(0,0)),
             mode: SketchMode::OneFinger,
             fingers: FxHashMap::default(),
             one_finger: Vec::new(),
@@ -230,13 +247,6 @@ impl Sketch {
             }
 
             let glob = Glob::new("**/*.png").unwrap().compile_matcher();
-            let mut loadables: Vec<PathBuf> =
-                WalkDir::new(&self.save_path).min_depth(1).into_iter()
-                .filter_map(|e| e.ok().filter(|e| !e.is_hidden())
-                            .and_then(|e| e.path().file_name().map(PathBuf::from)))
-                .filter(|p| glob.is_match(p))
-                .collect();
-            loadables.sort_by(|a, b| b.cmp(a));
             let mut sizes = vec![
                 EntryKind::CheckBox("Dynamic".to_string(),
                                     EntryId::TogglePenDynamism,
@@ -279,19 +289,24 @@ impl Sketch {
                 EntryKind::Command("Quit".to_string(), EntryId::Quit),
             ];
 
+            let loadables = list(context.library.home.join(&context.settings.sketch.save_path));
             if !loadables.is_empty() {
-                entries.insert(entries.len() - 1, EntryKind::SubMenu("Load".to_string(),
-                    loadables.into_iter().map(|e|
-                        EntryKind::Command(e.to_string_lossy().into_owned(),
-                                           EntryId::Load(e))).collect()));
+                let mut loads_menu = Vec::new();
+                loadables.into_iter().for_each(|(f,e)|
+                                               loads_menu.push(
+                                                   EntryKind::Command(f.to_string_lossy().into_owned(),
+                                                                      EntryId::Load(e))));
+                entries.insert(entries.len() -1,
+                               EntryKind::SubMenu("Load".to_string(), loads_menu));
             }
 
             let mut backgrounds_menu = vec!(EntryKind::Command("☒ Clear".to_string(), EntryId::ClearBackground));
             backgrounds_menu.push(EntryKind::Separator);
-            Background::list(context).into_iter().for_each(|(f,e)|
-                                                           backgrounds_menu.push(
-                                                               EntryKind::Command(f.to_string_lossy().into_owned(),
-                                                                                  EntryId::LoadBackground(e))));
+            list(context.library.home.join(&context.settings.sketch.background_path))
+                .into_iter().for_each(|(f,e)|
+                                      backgrounds_menu.push(
+                                          EntryKind::Command(f.to_string_lossy().into_owned(),
+                                                             EntryId::LoadBackground(e))));
             entries.insert(entries.len() - 1,
                            EntryKind::SubMenu("Load Background".to_string(), backgrounds_menu));
 
@@ -303,11 +318,14 @@ impl Sketch {
     }
 
     fn load(&mut self, filename: &PathBuf) -> Result<(), Error> {
-        let path = self.save_path.join(filename);
-        let decoder = png::Decoder::new(File::open(path)?);
-        let mut reader = decoder.read_info()?;
-        reader.next_frame(self.pixmap.data_mut())?;
-        self.filename = filename.to_string_lossy().into_owned();
+        if let Some(index) = dbg!(locate::<Image>(self)) {
+            if let Some(image) = self.children[dbg!(index)].downcast_mut::<Image>() {
+                image.clear(dbg!(WHITE));
+                if let Some(pixmap) = load(dbg!(filename)) {
+                    //                    image.draw_pixmap(&pixmap, dbg!(self.rect.min));
+                }
+            }
+        }
         Ok(())
     }
 
@@ -316,7 +334,11 @@ impl Sketch {
             fs::create_dir_all(&self.save_path)?;
         }
         let path = self.save_path.join(&self.filename);
-        self.pixmap.save(&path.to_string_lossy().into_owned())?;
+        if let Some(index) = locate::<Image>(self) {
+            if let Some(image) = self.children[index].downcast_ref::<Image>() {
+                image.save(&path.to_string_lossy().into_owned())?;
+            }
+        }
         Ok(())
     }
 
@@ -330,7 +352,7 @@ impl Sketch {
 }
 
 #[inline]
-fn draw_segment(pixmap: &mut Pixmap, ts: &TouchState, position: Point, time: f64, pen: &Pen, id: Id, fb_rect: &Rectangle, rq: &mut RenderQueue) {
+fn draw_segment(image: &mut Image, ts: TouchState, position: Point, time: f64, pen: &Pen, id: Id, fb_rect: &Rectangle, rq: &mut RenderQueue) {
     let (start_radius, end_radius) = if pen.dynamic {
         if time > ts.time {
             let d = vec2!((position.x - ts.pt.x) as f32,
@@ -351,17 +373,16 @@ fn draw_segment(pixmap: &mut Pixmap, ts: &TouchState, position: Point, time: f64
                                        start_radius.ceil() as i32,
                                        end_radius.ceil() as i32);
 
-    pixmap.draw_segment(ts.pt, position, start_radius, end_radius, pen.color);
-
+    image.draw_segment(ts.pt, position, start_radius, end_radius, pen.color);
     if let Some(render_rect) = rect.intersection(fb_rect) {
         rq.add(RenderData::no_wait(id, render_rect, UpdateMode::Fast));
     }
 }
 
 #[inline]
-fn draw_fast_segment(pixmap: &mut Pixmap, ts: &TouchState, position: Point, pen: &Pen, id: Id, fb_rect: &Rectangle, rq: &mut RenderQueue) {
+fn draw_fast_segment(image: &mut Image, ts: TouchState, position: Point, pen: &Pen, id: Id, fb_rect: &Rectangle, rq: &mut RenderQueue) {
 
-    pixmap.draw_segment(ts.pt, position, 0.5, 0.5, pen.color);
+    image.draw_segment(ts.pt, position, 0.5, 0.5, pen.color);
 
     let rect = Rectangle::from_segment(ts.pt, position, 1, 1);
     if let Some(render_rect) = rect.intersection(fb_rect) {
@@ -384,15 +405,20 @@ impl View for Sketch {
                         }
                     {
                         if let Some(last) = ts.last() {
-                            match self.mode {
-                                SketchMode::OneFinger | SketchMode::Fast =>
-                                    draw_fast_segment(&mut self.pixmap, last, corrected_position, &self.pen, self.id, &self.rect, rq),
-                                SketchMode::Full =>
-                                    draw_segment(&mut self.pixmap, last, corrected_position, time, &self.pen, self.id, &self.rect, rq),
+                            let last = *last;
+                            let radius = self.pen.size as f32 / 2.0;
+                            ts.push(TouchState::new(corrected_position, time, radius));
+                            if let Some(index) = locate::<Image>(self) {
+                                if let Some(image) = &mut self.children[index].downcast_mut::<Image>() {
+                                    match self.mode {
+                                        SketchMode::OneFinger | SketchMode::Fast =>
+                                            draw_fast_segment(image, last, corrected_position, &self.pen, self.id, &self.rect, rq),
+                                        SketchMode::Full =>
+                                            draw_segment(image, last, corrected_position, time, &self.pen, self.id, &self.rect, rq),
+                                    }
+                                }
                             }
                         }
-                        let radius = self.pen.size as f32 / 2.0;
-                        ts.push(TouchState::new(corrected_position, time, radius));
                     }
                 }
                 true
@@ -427,13 +453,17 @@ impl View for Sketch {
 
                     let (mut current_position, mut current_time) = (corrected_position, time);
                     let mut last_element = ts.pop();
-                    while let Some(last) = last_element {
-                        draw_segment(&mut self.pixmap, &last, current_position, current_time, &self.pen, self.id, &self.rect, rq);
+                    // if let Some(index) = locate::<Image>(self) {
+                    //     if let Some(image) = &mut self.children[index].downcast_mut::<Image>() {
+                            while let Some(last) = last_element {
+                                // draw_segment(image, last, current_position, current_time, &self.pen, self.id, &self.rect, rq);
 
-                        current_position = last.pt;
-                        current_time = last.time;
-                        last_element = ts.pop();
-                    }
+                                current_position = last.pt;
+                                current_time = last.time;
+                                last_element = ts.pop();
+                            }
+                    //     }
+                    // }
                 }
                 self.drawing = match self.mode {
                     SketchMode::OneFinger if id == self.one_finger_id => false,
@@ -477,7 +507,7 @@ impl View for Sketch {
                 if let Some(index) = locate_by_id(self, ViewId::SketchBackground) {
                     self.children.remove(index);
                 }
-                let mut boxed_bg = Box::new(Background::new(self.rect, &self.random));
+                let mut boxed_bg = Box::new(Background::new(self.rect));
                 if let Err(e) = boxed_bg.load(name, rq) {
                     let msg = format!("Couldn't background sketch: {}).", e);
                     let notif = Notification::new(msg, hub, rq, context);
@@ -501,7 +531,11 @@ impl View for Sketch {
                 true
             },
             Event::Select(EntryId::New) => {
-                self.pixmap.clear(WHITE);
+                if let Some(index) = locate::<Image>(self) {
+                    if let Some(image) = self.children[index].downcast_mut::<Image>() {
+                        image.clear(WHITE);
+                    }
+                }
                 self.filename = Local::now().format(FILENAME_PATTERN).to_string();
                 rq.add(RenderData::new(self.id, self.rect, UpdateMode::Gui));
                 true
@@ -533,12 +567,12 @@ impl View for Sketch {
     }
 
     fn render(&self, fb: &mut dyn Framebuffer, rect: Rectangle, _fonts: &mut Fonts) {
-        if (! self.drawing) || self.mode == SketchMode::Full
-        {
-            fb.draw_framed_pixmap_blended(&self.pixmap, &rect, rect.min, BLACK);
-        } else {
-            fb.draw_framed_pixmap_halftone(&self.pixmap, &self.random, &rect, rect.min);
-        }
+        
+        // if (! self.drawing) || self.mode == SketchMode::Full {
+        //     fb.draw_framed_pixmap_blended(&self.image.pixmap(), &rect, rect.min, BLACK);
+        // } else {
+        //     fb.draw_framed_pixmap_halftone(&self.image.pixmap(), &self.random, &rect, rect.min);
+        // }
     }
 
     fn render_rect(&self, rect: &Rectangle) -> Rectangle {
@@ -551,7 +585,7 @@ impl View for Sketch {
     }
 
     fn is_background(&self) -> bool {
-        true
+        false
     }
 
     fn rect(&self) -> &Rectangle {
