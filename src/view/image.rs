@@ -1,7 +1,7 @@
 use anyhow::Error;
 use crate::framebuffer::{Framebuffer, UpdateMode, Pixmap};
 use crate::view::{View, Event, Hub, Bus, Id, ID_FEEDER, RenderQueue, RenderData};
-use crate::color::WHITE;
+use crate::color::{WHITE, BLACK};
 use crate::geom::Rectangle;
 use crate::app::Context;
 use crate::font::Fonts;
@@ -12,6 +12,7 @@ pub struct Image {
     children: Vec<Box<dyn View>>,
     pixmap: Pixmap,
     blended: bool,
+    blended_color: u8,
 }
 
 impl Image {
@@ -22,6 +23,7 @@ impl Image {
             children: Vec::new(),
             pixmap,
             blended: false,
+            blended_color: BLACK,
         }
     }
 
@@ -30,8 +32,9 @@ impl Image {
         rq.add(RenderData::new(self.id, self.rect, UpdateMode::Gui));
     }
 
-    pub fn set_blended(&mut self, blended: bool) {
+    pub fn set_blended(&mut self, blended: bool, color: u8) {
         self.blended = blended;
+        self.blended_color = color;
     }
 
     pub fn pixmap(&self) -> &Pixmap {
@@ -72,7 +75,7 @@ impl View for Image {
             if ! self.blended {
                 fb.draw_framed_pixmap(&self.pixmap, &frame, r.min);
             } else {
-                fb.draw_framed_pixmap_blended(&self.pixmap, &frame, r.min, WHITE);
+                fb.draw_framed_pixmap_blended(&self.pixmap, &frame, r.min, self.blended_color);
             }
         }
     }

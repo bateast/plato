@@ -106,11 +106,9 @@ impl Background {
     }
 
     pub fn load(&mut self, filename: &PathBuf, rq: &mut RenderQueue) -> Result<(), Error> {
-        let mut pixmap = Pixmap::new(self.rect.width(), self.rect.height());
-        pixmap.clear(WHITE);
-        if let Some(new_pixmap) = load(filename) {
-            pixmap.draw_pixmap(&new_pixmap, self.rect.min);
-            self.image.update(pixmap, rq);
+        self.image.clear(WHITE);
+        if let Some(pixmap) = load(filename) {
+            self.image.draw_pixmap(&pixmap, self.rect.min);
         }
         Ok(())
     }
@@ -121,6 +119,10 @@ impl Background {
 
     fn view_id(&self) -> Option<ViewId> {
         Some(ViewId::SketchBackground)
+    }
+
+    pub fn clear(&mut self, color: u8) {
+        self.image.clear(color);
     }
 }
 
@@ -167,7 +169,8 @@ pub struct Sketch {
     rect: Rectangle,
     children: Vec<Box<dyn View>>,
     random: Pixmap,
-    image:Image,
+    background: usize,
+    image: usize,
     mode: SketchMode,
     fingers: FxHashMap<i32, Vec<TouchState>>,
     one_finger: Vec<TouchState>,
@@ -183,14 +186,18 @@ pub struct Sketch {
 impl Sketch {
     pub fn new(rect: Rectangle, rq: &mut RenderQueue, context: &mut Context) -> Sketch {
         let id = ID_FEEDER.next();
-        let mut children = Vec::new();
-        children.push(Box::new(Background::new(rect)) as Box<dyn View>);
+        let mut children = Vec::<Box::<dyn View>>::new();
         let dpi = CURRENT_DEVICE.dpi;
         let small_height = scale_by_dpi(SMALL_BAR_HEIGHT, dpi) as i32;
         let border_radius = scale_by_dpi(BORDER_RADIUS_SMALL, dpi) as i32;
         let pixmap = &ICONS_PIXMAPS[ICON_NAME];
-        let image = Image::new(rect, Pixmap::new(rect.width(), rect.height()));
+        let background = Background::new(rect);
+        children.push(Box::new(background));
+        let background = children.len() - 1;
+        let mut image = Image::new(rect, Pixmap::new(rect.width(), rect.height()));
+        image.set_blended(true, BLACK);
         children.push(Box::new(image));
+        let image = children.len() - 1;
         let icon_padding = (small_height - pixmap.width.max(pixmap.height) as i32) / 2;
         let width = pixmap.width as i32 + icon_padding;
         let height = pixmap.height as i32 + icon_padding;
@@ -218,8 +225,9 @@ impl Sketch {
             id,
             rect,
             children,
+            image,
+            background,
             random,
-            image:Image::new(rect, Pixmap::new(0,0)),
             mode: SketchMode::OneFinger,
             fingers: FxHashMap::default(),
             one_finger: Vec::new(),
@@ -318,12 +326,10 @@ impl Sketch {
     }
 
     fn load(&mut self, filename: &PathBuf) -> Result<(), Error> {
-        if let Some(index) = dbg!(locate::<Image>(self)) {
-            if let Some(image) = self.children[dbg!(index)].downcast_mut::<Image>() {
-                image.clear(dbg!(WHITE));
-                if let Some(pixmap) = load(dbg!(filename)) {
-                    //                    image.draw_pixmap(&pixmap, dbg!(self.rect.min));
-                }
+        if let Some(image) = self.children[self.image].downcast_mut::<Image>() {
+            image.clear(WHITE);
+            if let Some(pixmap) = load(filename) {
+                image.draw_pixmap(&pixmap, self.rect.min);
             }
         }
         Ok(())
@@ -334,10 +340,8 @@ impl Sketch {
             fs::create_dir_all(&self.save_path)?;
         }
         let path = self.save_path.join(&self.filename);
-        if let Some(index) = locate::<Image>(self) {
-            if let Some(image) = self.children[index].downcast_ref::<Image>() {
-                image.save(&path.to_string_lossy().into_owned())?;
-            }
+        if let Some(image) = self.children[self.image].downcast_ref::<Image>() {
+            image.save(&path.to_string_lossy().into_owned())?;
         }
         Ok(())
     }
@@ -408,14 +412,12 @@ impl View for Sketch {
                             let last = *last;
                             let radius = self.pen.size as f32 / 2.0;
                             ts.push(TouchState::new(corrected_position, time, radius));
-                            if let Some(index) = locate::<Image>(self) {
-                                if let Some(image) = &mut self.children[index].downcast_mut::<Image>() {
-                                    match self.mode {
-                                        SketchMode::OneFinger | SketchMode::Fast =>
-                                            draw_fast_segment(image, last, corrected_position, &self.pen, self.id, &self.rect, rq),
-                                        SketchMode::Full =>
-                                            draw_segment(image, last, corrected_position, time, &self.pen, self.id, &self.rect, rq),
-                                    }
+                            if let Some(image) = &mut self.children[self.image].downcast_mut::<Image>() {
+                                match self.mode {
+                                    SketchMode::OneFinger | SketchMode::Fast =>
+                                        draw_fast_segment(image, last, corrected_position, &self.pen, self.id, &self.rect, rq),
+                                    SketchMode::Full =>
+                                        draw_segment(image, last, corrected_position, time, &self.pen, self.id, &self.rect, rq),
                                 }
                             }
                         }
@@ -453,17 +455,15 @@ impl View for Sketch {
 
                     let (mut current_position, mut current_time) = (corrected_position, time);
                     let mut last_element = ts.pop();
-                    // if let Some(index) = locate::<Image>(self) {
-                    //     if let Some(image) = &mut self.children[index].downcast_mut::<Image>() {
-                            while let Some(last) = last_element {
-                                // draw_segment(image, last, current_position, current_time, &self.pen, self.id, &self.rect, rq);
+                    if let Some(image) = &mut self.children[self.image].downcast_mut::<Image>() {
+                        while let Some(last) = last_element {
+                            draw_segment(image, last, current_position, current_time, &self.pen, self.id, &self.rect, rq);
 
-                                current_position = last.pt;
-                                current_time = last.time;
-                                last_element = ts.pop();
-                            }
-                    //     }
-                    // }
+                            current_position = last.pt;
+                            current_time = last.time;
+                            last_element = ts.pop();
+                        }
+                    }
                 }
                 self.drawing = match self.mode {
                     SketchMode::OneFinger if id == self.one_finger_id => false,
@@ -504,25 +504,21 @@ impl View for Sketch {
                 true
             },
             Event::Select(EntryId::LoadBackground(ref name)) => {
-                if let Some(index) = locate_by_id(self, ViewId::SketchBackground) {
-                    self.children.remove(index);
-                }
-                let mut boxed_bg = Box::new(Background::new(self.rect));
-                if let Err(e) = boxed_bg.load(name, rq) {
-                    let msg = format!("Couldn't background sketch: {}).", e);
-                    let notif = Notification::new(msg, hub, rq, context);
-                    self.children.push(Box::new(notif) as Box<dyn View>);
-                } else {
-                    rq.add(RenderData::new(boxed_bg.id(), *boxed_bg.rect(), UpdateMode::Gui));
-                    self.children.push(boxed_bg);
+                if let Some(background) = self.children[self.background].downcast_mut::<Background>() {
+                    if let Err(e) = background.load(name, rq) {
+                        let msg = format!("Couldn't load sketch: {}).", e);
+                        let notif = Notification::new(msg, hub, rq, context);
+                        self.children.push(Box::new(notif) as Box<dyn View>);
+                    } else {
+                        rq.add(RenderData::new(self.id, self.rect, UpdateMode::Gui));
+                    }
                 }
                 true
-            }
-            ,
+            },
             Event::Select(EntryId::ClearBackground) => {
-                if let Some(index) = locate_by_id(self, ViewId::SketchBackground) {
-                    rq.add(RenderData::expose(*self.child(index).rect(), UpdateMode::Gui));
-                    self.children.remove(index);
+                if let Some(background) = self.children[self.background].downcast_mut::<Background>() {
+                    background.clear(WHITE);
+                    rq.add(RenderData::expose(*background.rect(), UpdateMode::Gui));
                 }
                 true
             },
@@ -531,10 +527,8 @@ impl View for Sketch {
                 true
             },
             Event::Select(EntryId::New) => {
-                if let Some(index) = locate::<Image>(self) {
-                    if let Some(image) = self.children[index].downcast_mut::<Image>() {
-                        image.clear(WHITE);
-                    }
+                if let Some(image) = self.children[self.image].downcast_mut::<Image>() {
+                    image.clear(WHITE);
                 }
                 self.filename = Local::now().format(FILENAME_PATTERN).to_string();
                 rq.add(RenderData::new(self.id, self.rect, UpdateMode::Gui));
