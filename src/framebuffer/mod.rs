@@ -35,6 +35,7 @@ pub enum UpdateMode {
 
 pub trait Framebuffer {
     fn set_pixel(&mut self, x: u32, y: u32, color: u8);
+    fn set_min_pixel(&mut self, x: u32, y: u32, color: u8);
     fn set_blended_pixel(&mut self, x: u32, y: u32, color: u8, alpha: f32);
     fn invert_region(&mut self, rect: &Rectangle);
     fn shift_region(&mut self, rect: &Rectangle, drift: u8);
@@ -105,6 +106,14 @@ pub trait Framebuffer {
         }
     }
 
+    fn draw_min_rectangle(&mut self, rect: &Rectangle, color: u8) {
+        for y in rect.min.y..rect.max.y {
+            for x in rect.min.x..rect.max.x {
+                self.set_min_pixel(x as u32, y as u32, color);
+            }
+        }
+    }
+
     fn draw_rectangle_outline(&mut self, rect: &Rectangle, border: &BorderSpec) {
         let BorderSpec { thickness: border_thickness,
                          color: border_color } = *border;
@@ -158,6 +167,18 @@ pub trait Framebuffer {
                 let alpha = (255.0 - pixmap.data[addr] as f32) / 255.0;
                 self.
                     set_blended_pixel(px as u32, py as u32, color, alpha);
+            }
+        }
+    }
+
+    fn draw_framed_pixmap_min(&mut self, pixmap: &Pixmap, rect: &Rectangle, pt: Point) {
+        for y in rect.min.y..rect.max.y {
+            for x in rect.min.x..rect.max.x {
+                let px = x - rect.min.x + pt.x;
+                let py = y - rect.min.y + pt.y;
+                let addr = (y * pixmap.width as i32 + x) as usize;
+                self.
+                    set_min_pixel(px as u32, py as u32, pixmap.data[addr]);
             }
         }
     }
@@ -260,6 +281,18 @@ pub trait Framebuffer {
                 let alpha = (255.0 - pixmap.data[addr] as f32) / 255.0;
                 self.
                     set_blended_pixel(px as u32, py as u32, color, alpha);
+            }
+        }
+    }
+
+    fn draw_min_pixmap(&mut self, pixmap: &Pixmap, pt: Point, color: u8) {
+        for y in 0..pixmap.height {
+            for x in 0..pixmap.width {
+                let px = x + pt.x as u32;
+                let py = y + pt.y as u32;
+                let addr = (y * pixmap.width + x) as usize;
+                self.
+                    set_min_pixel(px as u32, py as u32, color);
             }
         }
     }

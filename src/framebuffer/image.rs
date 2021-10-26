@@ -50,6 +50,14 @@ impl Framebuffer for Pixmap {
         self.data[addr] = color;
     }
 
+    fn set_min_pixel(&mut self, x: u32, y: u32, color: u8) {
+        if x >= self.width || y >= self.height {
+            return;
+        }
+        let addr = (y * self.width + x) as usize;
+        self.data[addr] = self.data[addr].min(color);
+    }
+
     fn set_blended_pixel(&mut self, x: u32, y: u32, color: u8, alpha: f32) {
         if alpha >= 1.0 {
             self.set_pixel(x, y, color);

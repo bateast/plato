@@ -106,6 +106,12 @@ impl Framebuffer for KoboFramebuffer1 {
         (self.set_pixel_rgb)(self, x, y, [c, c, c]);
     }
 
+    fn set_min_pixel(&mut self, x: u32, y: u32, color: u8) {
+        let c = (self.transform)(x, y, color);
+        let rgb = (self.get_pixel_rgb)(self, x, y);
+        (self.set_pixel_rgb)(self, x, y, [rgb[0].min(c), rgb[1].min(c), rgb[2].min(c)]);
+    }
+
     fn set_blended_pixel(&mut self, x: u32, y: u32, color: u8, alpha: f32) {
         if alpha >= 1.0 {
             self.set_pixel(x, y, color);

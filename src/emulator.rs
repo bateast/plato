@@ -131,7 +131,12 @@ impl Framebuffer for WindowCanvas {
         self.draw_point(SdlPoint::new(x as i32, y as i32)).unwrap();
     }
 
-    fn set_blended_pixel(&mut self, x: u32, y: u32, color: u8, alpha: f32) {
+    fn set_min_pixel(&mut self, x: u32, y: u32, color: u8) {
+        self.set_draw_color(SdlColor::RGB(color, color, color));
+        self.draw_point(SdlPoint::new(x as i32, y as i32)).unwrap();
+    }
+
+    Fn set_blended_pixel(&mut self, x: u32, y: u32, color: u8, alpha: f32) {
         self.set_draw_color(SdlColor::RGBA(color, color, color, (alpha * 255.0) as u8));
         self.draw_point(SdlPoint::new(x as i32, y as i32)).unwrap();
     }

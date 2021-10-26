@@ -195,7 +195,7 @@ impl Sketch {
         children.push(Box::new(background));
         let background = children.len() - 1;
         let mut image = Image::new(rect, Pixmap::new(rect.width(), rect.height()));
-        image.set_blended(true, BLACK);
+        image.set_min(true);
         children.push(Box::new(image));
         let image = children.len() - 1;
         let icon_padding = (small_height - pixmap.width.max(pixmap.height) as i32) / 2;
@@ -384,13 +384,13 @@ fn draw_segment(image: &mut Image, ts: TouchState, position: Point, time: f64, p
 }
 
 #[inline]
-fn draw_fast_segment(image: &mut Image, ts: TouchState, position: Point, pen: &Pen, id: Id, fb_rect: &Rectangle, rq: &mut RenderQueue) {
+fn draw_fast_segment(fb: &mut Box<dyn Framebuffer>, ts: TouchState, position: Point, pen: &Pen, id: Id, fb_rect: &Rectangle, rq: &mut RenderQueue) {
 
-    image.draw_segment(ts.pt, position, 0.5, 0.5, pen.color);
+    fb.draw_segment(ts.pt, position, 0.5, 0.5, pen.color);
 
     let rect = Rectangle::from_segment(ts.pt, position, 1, 1);
     if let Some(render_rect) = rect.intersection(fb_rect) {
-        rq.add(RenderData::no_wait(id, render_rect, UpdateMode::FastMono));
+        fb.update(&render_rect, UpdateMode::FastMono);
     }
 }
 
@@ -415,7 +415,7 @@ impl View for Sketch {
                             if let Some(image) = &mut self.children[self.image].downcast_mut::<Image>() {
                                 match self.mode {
                                     SketchMode::OneFinger | SketchMode::Fast =>
-                                        draw_fast_segment(image, last, corrected_position, &self.pen, self.id, &self.rect, rq),
+                                        draw_fast_segment(&mut context.fb, last, corrected_position, &self.pen, self.id, &self.rect, rq),
                                     SketchMode::Full =>
                                         draw_segment(image, last, corrected_position, time, &self.pen, self.id, &self.rect, rq),
                                 }
@@ -430,8 +430,9 @@ impl View for Sketch {
                 let radius = self.pen.size as f32 / 2.0;
                 match self.mode {
                     SketchMode::OneFinger if self.drawing => {},
+                    SketchMode::OneFinger if self.drawing => {},
                     SketchMode::OneFinger => {
-                        self.one_finger = vec![TouchState::new(corrected_position, time, radius)];
+                        self.one_finger.push(TouchState::new(corrected_position, time, radius));
                         self.one_finger_id = id;
                     },
                     _ => {
