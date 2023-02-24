@@ -1504,7 +1504,7 @@ impl Reader {
                                             self.rect.max.x,
                                             self.rect.min.y + small_height - small_thickness],
                                       Event::Back,
-                                      self.info.title(),
+                                      self.info.title(), hub, rq,
                                       context);
 
             self.children.insert(index, Box::new(top_bar) as Box<dyn View>);

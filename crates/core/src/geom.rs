@@ -355,6 +355,18 @@ impl Point {
         Point { x, y }
     }
 
+    pub fn lt(&self, b: Point) -> bool {
+        self.x < b.x && self.y < b.y
+    }
+
+    pub fn le(&self, b: Point) -> bool {
+        self.x <= b.x && self.y <= b.y
+    }
+
+    pub fn min(&self, b: Point) -> Point{
+        pt!(self.x.min(b.x), self.y.min(b.y))
+    }
+
     pub fn dist2(self, pt: Point) -> u32 {
         ((pt.x - self.x).pow(2) + (pt.y - self.y).pow(2)) as u32
     }
@@ -942,6 +954,14 @@ impl AddAssign<Point> for Rectangle {
     }
 }
 
+impl Sub for Rectangle {
+    type Output = Rectangle;
+    fn sub(self, rhs: Rectangle) -> Rectangle {
+        let computed = rect!(self.min + rhs.min, self.max - rhs.max);
+        rect!(computed.min.min(computed.max), computed.max)
+    }
+}
+
 impl Sub<Point> for Rectangle {
     type Output = Rectangle;
     fn sub(self, rhs: Point) -> Rectangle {
@@ -1097,6 +1117,16 @@ impl Mul<Vec2> for f32 {
         Vec2 {
             x: self * rhs.x,
             y: self * rhs.y,
+        }
+    }
+}
+
+impl Mul<Vec2> for Point {
+    type Output = Vec2;
+    fn mul(self, rhs: Vec2) -> Vec2 {
+        Vec2 {
+            x: self.x as f32 * rhs.x,
+            y: self.y as f32 * rhs.y,
         }
     }
 }

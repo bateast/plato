@@ -127,7 +127,7 @@ impl Calculator {
                                         rect.max.x, rect.min.y + side - small_thickness],
                                   Event::Back,
                                   "Calculator".to_string(),
-                                  context);
+                                  hub, rq, context);
         children.push(Box::new(top_bar) as Box<dyn View>);
 
         let separator = Filler::new(rect![rect.min.x,

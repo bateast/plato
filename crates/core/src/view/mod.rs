@@ -42,6 +42,7 @@ pub mod calculator;
 pub mod sketch;
 pub mod touch_events;
 pub mod rotation_values;
+pub mod packed_view;
 
 use std::ops::{Deref, DerefMut};
 use std::time::{Instant, Duration};

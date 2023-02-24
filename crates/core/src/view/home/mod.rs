@@ -107,7 +107,7 @@ impl Home {
                                         rect.max.x, rect.min.y + small_height - small_thickness],
                                   Event::Toggle(ViewId::SearchBar),
                                   sort_method.title(),
-                                  context);
+                                  hub, rq, context);
         children.push(Box::new(top_bar) as Box<dyn View>);
 
         let separator = Filler::new(rect![rect.min.x, rect.min.y + small_height - small_thickness,
