@@ -29,12 +29,13 @@ impl TopBar {
             _ => "search",
         };
 
-        let mut null_rect = rect!(0, 0, 0, 0);
+        let null_rect = rect!(0, 0, 0, 0);
         let capacity = context.battery.capacity().map_or(0.0, |v| v[0]);
         let status = context.battery.status().map_or(crate::battery::Status::Discharging, |v| v[0]);
         let name = if context.settings.frontlight { "frontlight" } else { "frontlight-disabled" };
+        let clock_width = Clock::compute_width(context);
 
-        let packed = PackedView::new(rect)
+        let packed : PackedView = PackedView::new(rect)
             .push(Box::new(Icon::new(icon_name, null_rect, root_event)),
                   Position{
                       pack: Pack::Fixed(pt!(side, side)),
@@ -63,9 +64,9 @@ impl TopBar {
                       align: Align::Right(0),
                       valign:VAlign::Top(0),
                   }, hub, rq, context)
-            .push(Box::new(Clock::new(&mut null_rect, context)),
+            .push(Box::new(Clock::new(null_rect, context)),
                   Position{
-                      pack: Pack::Fixed(pt!(2 * side, side)),
+                      pack: Pack::Fixed(pt!(clock_width as i32, side)),
                       margin: null_rect,
                       align: Align::Right(0),
                       valign:VAlign::Top(0),
@@ -97,7 +98,7 @@ impl TopBar {
     }
 
     pub fn update_title_label(&mut self, title: &str, rq: &mut RenderQueue) {
-        let title_label = self.children[1].as_mut().downcast_mut::<Label>().unwrap();
+        let title_label = self.children_mut()[1].as_mut().downcast_mut::<Label>().unwrap();
         title_label.update(title, rq);
     }
 
@@ -109,13 +110,13 @@ impl TopBar {
     }
 
     pub fn update_clock_label(&mut self, rq: &mut RenderQueue) {
-        if let Some(clock_label) = self.children[2].downcast_mut::<Clock>() {
+        if let Some(clock_label) = self.children_mut()[2].downcast_mut::<Clock>() {
             clock_label.update(rq);
         }
     }
 
     pub fn update_battery_widget(&mut self, rq: &mut RenderQueue, context: &mut Context) {
-        if let Some(battery_widget) = self.children[3].downcast_mut::<Battery>() {
+        if let Some(battery_widget) = self.children_mut()[3].downcast_mut::<Battery>() {
             battery_widget.update(rq, context);
         }
     }
@@ -143,23 +144,23 @@ impl View for TopBar {
 
     fn resize(&mut self, rect: Rectangle, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
         let side = rect.height() as i32;
-        self.children[0].resize(rect![rect.min, rect.min+side], hub, rq, context);
-        let clock_width = self.children[2].rect().width() as i32;
+        self.children_mut()[0].resize(rect![rect.min, rect.min+side], hub, rq, context);
+        let clock_width = self.children()[2].rect().width() as i32;
         let clock_rect = rect![rect.max - pt!(3*side + clock_width, side),
                                rect.max - pt!(3*side, 0)];
-        self.children[1].resize(rect![rect.min.x + side,
+        self.children_mut()[1].resize(rect![rect.min.x + side,
                                       rect.min.y,
                                       clock_rect.min.x,
                                       rect.max.y],
                                 hub, rq, context);
-        self.children[2].resize(clock_rect, hub, rq, context);
-        self.children[3].resize(rect![rect.max - pt!(3*side, side),
+        self.children_mut()[2].resize(clock_rect, hub, rq, context);
+        self.children_mut()[3].resize(rect![rect.max - pt!(3*side, side),
                                       rect.max - pt!(2*side, 0)],
                                 hub, rq, context);
-        self.children[4].resize(rect![rect.max - pt!(2*side, side),
+        self.children_mut()[4].resize(rect![rect.max - pt!(2*side, side),
                                       rect.max - pt!(side, 0)],
                                 hub, rq, context);
-        self.children[5].resize(rect![rect.max-side, rect.max],
+        self.children_mut()[5].resize(rect![rect.max-side, rect.max],
                                 hub, rq, context);
         self.rect = rect;
     }
@@ -173,11 +174,11 @@ impl View for TopBar {
     }
 
     fn children(&self) -> &Vec<Box<dyn View>> {
-        &self.children
+        self.children[0].children()
     }
 
     fn children_mut(&mut self) -> &mut Vec<Box<dyn View>> {
-        &mut self.children
+        self.children[0].children_mut()
     }
 
     fn id(&self) -> Id {

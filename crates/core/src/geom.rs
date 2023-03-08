@@ -937,6 +937,16 @@ impl DivAssign<i32> for Point {
     }
 }
 
+impl Add for Rectangle {
+    type Output = Rectangle;
+    fn add(self, rhs: Rectangle) -> Rectangle {
+        Rectangle {
+            min: self.min + rhs.min,
+            max: self.max + rhs.max,
+        }
+    }
+}
+
 impl Add<Point> for Rectangle {
     type Output = Rectangle;
     fn add(self, rhs: Point) -> Rectangle {

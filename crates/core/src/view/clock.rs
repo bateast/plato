@@ -17,15 +17,12 @@ pub struct Clock {
 }
 
 impl Clock {
-    pub fn new(rect: &mut Rectangle, context: &mut Context) -> Clock {
+    pub fn new(rect: Rectangle, context: &mut Context) -> Clock {
         let time = Local::now();
         let format = context.settings.time_format.clone();
-        let font = font_from_style(&mut context.fonts, &NORMAL_STYLE, CURRENT_DEVICE.dpi);
-        let width = font.plan(&time.format(&format).to_string(), None, None).width + font.em() as i32;
-        rect.min.x = rect.max.x - width;
         Clock {
             id: ID_FEEDER.next(),
-            rect: *rect,
+            rect,
             children: Vec::new(),
             format,
             time,
@@ -35,6 +32,15 @@ impl Clock {
     pub fn update(&mut self, rq: &mut RenderQueue) {
         self.time = Local::now();
         rq.add(RenderData::new(self.id, self.rect, UpdateMode::Gui));
+    }
+
+    pub fn compute_width(context : &mut Context) -> u32 {
+        let time = Local::now();
+        let format = context.settings.time_format.clone();
+        let font = font_from_style(&mut context.fonts, &NORMAL_STYLE, CURRENT_DEVICE.dpi);
+        let width = font.plan(&time.format(&format).to_string(), None, None).width + font.em() as i32;
+
+        width as u32
     }
 }
 

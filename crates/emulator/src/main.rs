@@ -5,6 +5,7 @@ use std::sync::mpsc;
 use std::collections::VecDeque;
 use std::path::Path;
 use std::time::Duration;
+use env_logger;
 use plato_core::anyhow::{Error, Context as ResultExt};
 use plato_core::chrono::Local;
 use sdl2::event::Event as SdlEvent;
@@ -205,6 +206,9 @@ impl Framebuffer for FBCanvas {
 }
 
 fn main() -> Result<(), Error> {
+
+    env_logger::init();
+
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
     let (width, height) = CURRENT_DEVICE.dims;
