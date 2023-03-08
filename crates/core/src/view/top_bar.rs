@@ -15,7 +15,7 @@ use crate::context::Context;
 pub struct TopBar {
     id: Id,
     rect: Rectangle,
-    children: Vec<Box<dyn View>>,
+    views: PackedView,
 }
 
 const SEARCH : usize = 0;
@@ -28,7 +28,6 @@ const TITLE : usize = 5;
 impl TopBar {
     pub fn new(rect: Rectangle, root_event: Event, title: String, hub: &Hub, rq: &mut RenderQueue, context : &mut Context) -> TopBar {
         let id = ID_FEEDER.next();
-        let mut children = Vec::new();
 
         let side = rect.height() as i32;
         let icon_name = match root_event {
@@ -42,7 +41,7 @@ impl TopBar {
         let name = if context.settings.frontlight { "frontlight" } else { "frontlight-disabled" };
         let clock_width = Clock::compute_width(context);
 
-        let packed : PackedView = PackedView::new(rect)
+        let views : PackedView = PackedView::new(rect)
             .push(Box::new(Icon::new(icon_name, null_rect, root_event)),
                   Position::squared_top_left(side), hub, rq, context)
             .push(Box::new(Icon::new("menu", null_rect, Event::ToggleNear(ViewId::MainMenu, null_rect))),
@@ -57,12 +56,10 @@ impl TopBar {
                            .event(Some(Event::ToggleNear(ViewId::TitleMenu, null_rect)))),
                   Position::filled_top_left(), hub, rq, context);
 
-        children.push(Box::new(packed) as Box<dyn View>);
-
         TopBar {
             id,
             rect,
-            children,
+            views,
         }
     }
 
@@ -122,15 +119,14 @@ impl View for TopBar {
     fn resize(&mut self, rect: Rectangle, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
         let side = rect.height() as i32;
         let clock_width = Clock::compute_width(context);
-        let packed = self.children[0].downcast_mut::<PackedView>().unwrap();
-        packed.update_position(SEARCH, Position::squared_top_left(side), hub, rq, context);
-        packed.update_position(MENU, Position::squared_top_right(side), hub, rq, context);
-        packed.update_position(BATTERY, Position::squared_top_right(side), hub, rq, context);
-        packed.update_position(LIGHT, Position::squared_top_right(side), hub, rq, context);
-        packed.update_position(CLOCK, Position::top_right(clock_width as i32, side), hub, rq, context);
-        packed.update_position(TITLE, Position::filled_top_left(), hub, rq, context);
+        self.views.update_position(SEARCH, Position::squared_top_left(side), hub, rq, context);
+        self.views.update_position(MENU, Position::squared_top_right(side), hub, rq, context);
+        self.views.update_position(BATTERY, Position::squared_top_right(side), hub, rq, context);
+        self.views.update_position(LIGHT, Position::squared_top_right(side), hub, rq, context);
+        self.views.update_position(CLOCK, Position::top_right(clock_width as i32, side), hub, rq, context);
+        self.views.update_position(TITLE, Position::filled_top_left(), hub, rq, context);
 
-        self.children[0].resize(rect, hub, rq, context);
+        self.views.resize(rect, hub, rq, context);
         self.rect = rect;
     }
 
@@ -143,11 +139,11 @@ impl View for TopBar {
     }
 
     fn children(&self) -> &Vec<Box<dyn View>> {
-        self.children[0].children()
+        self.views.children()
     }
 
     fn children_mut(&mut self) -> &mut Vec<Box<dyn View>> {
-        self.children[0].children_mut()
+        self.views.children_mut()
     }
 
     fn id(&self) -> Id {
