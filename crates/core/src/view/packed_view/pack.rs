@@ -1,5 +1,17 @@
 use crate::geom::{Rectangle, Point, Vec2};
 
+
+const NULL_RECT : Rectangle = Rectangle {
+    min : Point {
+        x: 0,
+        y: 0,
+    },
+    max : Point {
+        x: 0,
+        y: 0,
+    },
+};
+
 pub use crate::view::Align;
 #[derive(Debug)]
 pub enum VAlign {
@@ -28,4 +40,47 @@ pub struct Position {
     pub align: Align,
     /// Vertical position in outer rect, plus outer margin
     pub valign: VAlign,
+}
+
+impl Position {
+    pub fn squared_top_left(a : i32) -> Self {
+        Position{
+            pack: Pack::Fixed(pt!(a, a)),
+            margin: NULL_RECT,
+            align: Align::Left(0),
+            valign: VAlign::Top(0),
+        }
+    }
+    pub fn squared_top_right(a : i32) -> Self {
+        Position{
+            pack: Pack::Fixed(pt!(a, a)),
+            margin: NULL_RECT,
+            align: Align::Right(0),
+            valign: VAlign::Top(0),
+        }
+    }
+    pub fn top_left(x : i32, y: i32) -> Self {
+        Position{
+            pack: Pack::Fixed(pt!(x, y)),
+            margin: NULL_RECT,
+            align: Align::Left(0),
+            valign: VAlign::Top(0),
+        }
+    }
+    pub fn top_right(x : i32, y: i32) -> Self {
+        Position{
+            pack: Pack::Fixed(pt!(x, y)),
+            margin: NULL_RECT,
+            align: Align::Right(0),
+            valign: VAlign::Top(0),
+        }
+    }
+    pub fn filled_top_left() -> Self {
+        Position {
+            pack: Pack::Fill,
+            margin: NULL_RECT,
+            align: Align::Left(0),
+            valign: VAlign::Top(0)
+        }
+    }
 }

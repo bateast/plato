@@ -36,6 +36,11 @@ impl PackedView {
         self
     }
 
+    pub fn update_position(&mut self, index: usize, new_position: Position, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
+        self.positions[index] = new_position;
+        self.resize(self.rect, hub, rq, context);
+    }
+
     fn compute_sizes(&self) -> Vec<Rectangle> {
         let mut sizes = Vec::new();
         let full_size = pt!(self.rect.width() as i32, self.rect.height() as i32);
@@ -50,7 +55,7 @@ impl PackedView {
             }
             debug!("Packed {} — computing size in {:?}", self.id(), availabilities);
             debug!("Packed {} — ||- placing {:?} (margin {:?}, align {:?}, valign {:?})", self.id(), pack, margin, align, valign);
-            
+
             let outer_h_margin = match align {
                 Align::Left(h) | Align::Right(h) => *h,
                 _ => 0,
@@ -189,7 +194,7 @@ impl View for PackedView {
 
         let sizes = self.compute_sizes();
         for (index, size) in sizes.iter().enumerate() {
-            self.children[index].resize(*size, hub, rq, context);
+            self.child_mut(index).resize(*size, hub, rq, context);
         }
     }
 
