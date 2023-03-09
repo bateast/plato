@@ -26,6 +26,8 @@ use crate::view::search_bar::SearchBar;
 use crate::view::top_bar::TopBar;
 use self::bottom_bar::BottomBar;
 
+use crate::view::packed_view::{PackedView, Position, VAlign, Pack};
+
 const VIEWER_STYLESHEET: &str = "css/dictionary.css";
 const USER_STYLESHEET: &str = "css/dictionary-user.css";
 
@@ -96,33 +98,10 @@ impl Dictionary {
         let thickness = scale_by_dpi(THICKNESS_MEDIUM, dpi) as i32;
         let (small_thickness, big_thickness) = halves(thickness);
 
-        let top_bar = TopBar::new(rect![rect.min.x, rect.min.y,
-                                        rect.max.x, rect.min.y + small_height - small_thickness],
-                                  Event::Back,
-                                  "Dictionary".to_string(),
-                                  hub, rq, context);
-        children.push(Box::new(top_bar) as Box<dyn View>);
-
-        let separator = Filler::new(rect![rect.min.x, rect.min.y + small_height - small_thickness,
-                                          rect.max.x, rect.min.y + small_height + big_thickness],
-                                    BLACK);
-        children.push(Box::new(separator) as Box<dyn View>);
-
-        let search_bar = SearchBar::new(rect![rect.min.x, rect.min.y + small_height + big_thickness,
-                                              rect.max.x, rect.min.y + 2 * small_height - small_thickness],
-                                        ViewId::DictionarySearchInput,
-                                        "", query, context);
-        children.push(Box::new(search_bar) as Box<dyn View>);
-
-        let separator = Filler::new(rect![rect.min.x, rect.min.y + 2 * small_height - small_thickness,
-                                          rect.max.x, rect.min.y + 2 * small_height + big_thickness],
-                                    BLACK);
-        children.push(Box::new(separator) as Box<dyn View>);
-
         let langs = &context.settings.dictionary.languages;
         let matches = context.dictionaries.keys()
-                             .filter(|&k| langs.contains_key(k) && langs[k].contains(&language.to_string()))
-                             .collect::<Vec<&String>>();
+            .filter(|&k| langs.contains_key(k) && langs[k].contains(&language.to_string()))
+            .collect::<Vec<&String>>();
         let target = if matches.len() == 1 {
             Some(matches[0].clone())
         } else {
@@ -133,11 +112,29 @@ impl Dictionary {
             }
         };
 
+        let packed = PackedView::new(rect)
+            .push(Box::new(TopBar::new(rect, Event::Back, "Dictionary".to_string(), hub, rq, context)),
+                        Position::hfilled_top_left((small_height - small_thickness) as u32), hub, rq, context)
+            .push(Box::new(Filler::new(rect, BLACK)), 
+                  Position::hfilled_top_left((small_thickness + big_thickness) as u32), hub, rq, context)
+            .push(Box::new(SearchBar::new(rect, ViewId::DictionarySearchInput, "", query, context)),
+                  Position::hfilled_top_left((small_height - small_thickness - big_thickness) as u32), hub, rq, context)
+            .push(Box::new(Filler::new(rect, BLACK)), 
+                  Position::hfilled_top_left((small_thickness + big_thickness) as u32), hub, rq, context)
+
+            .push(Box::new(BottomBar::new(rect, target.as_deref().unwrap_or("All"), false, false)),
+                  Position::hfilled_bottom_left((small_height - big_thickness) as u32), hub, rq, context)
+            .push(Box::new(Filler::new(rect, BLACK)), 
+                  Position::hfilled_bottom_left((small_thickness + big_thickness) as u32), hub, rq, context)
+
+            .push(Box::new(Image::new(rect, Pixmap::new(1, 1))),
+                  Position::filled_top_left(),hub,rq,context);
+
+        children.push(Box::new(packed) as Box<dyn View>);
+
+
         let image_rect = rect![rect.min.x, rect.min.y + 2 * small_height + big_thickness,
                                rect.max.x, rect.max.y - small_height - small_thickness];
-
-        let image = Image::new(image_rect, Pixmap::new(1, 1));
-        children.push(Box::new(image) as Box<dyn View>);
 
         let mut doc = HtmlDocument::new_from_memory("");
         doc.layout(image_rect.width(), image_rect.height(), context.settings.dictionary.font_size, dpi);
@@ -149,11 +146,6 @@ impl Dictionary {
                                           rect.max.x, rect.max.y - small_height + big_thickness],
                                     BLACK);
         children.push(Box::new(separator) as Box<dyn View>);
-
-        let bottom_bar = BottomBar::new(rect![rect.min.x, rect.max.y - small_height + big_thickness,
-                                              rect.max.x, rect.max.y],
-                                        target.as_deref().unwrap_or("All"), false, false);
-        children.push(Box::new(bottom_bar) as Box<dyn View>);
 
         rq.add(RenderData::new(id, rect, UpdateMode::Gui));
 
@@ -247,14 +239,25 @@ impl Dictionary {
     }
 
     fn toggle_keyboard(&mut self, enable: bool, id: Option<ViewId>, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
-        if let Some(index) = locate::<Keyboard>(self) {
+        let dpi = CURRENT_DEVICE.dpi;
+        let (small_height, big_height) = (scale_by_dpi(SMALL_BAR_HEIGHT, dpi) as i32,
+                                          scale_by_dpi(BIG_BAR_HEIGHT, dpi) as i32);
+        let thickness = scale_by_dpi(THICKNESS_MEDIUM, dpi) as i32;
+        let (small_thickness, big_thickness) = halves(thickness);
+        let mut kb_rect = rect![self.rect.min.x,
+                                self.rect.max.y - (small_height + 3 * big_height) as i32 + big_thickness,
+                                self.rect.max.x,
+                                self.rect.max.y - small_height - small_thickness];
+
+        let packed = self.child_mut(0).downcast_mut::<PackedView>().unwrap();
+        if let Some(index) = locate::<Keyboard>(packed) {
             if enable {
                 return;
             }
 
-            let mut rect = *self.child(index).rect();
-            rect.absorb(self.child(index-1).rect());
-            self.children.drain(index - 1 ..= index);
+            let mut rect = *packed.child(index).rect();
+            rect.absorb(packed.child(index-1).rect());
+            packed.children_mut().drain(index - 1 ..= index);
 
             rq.add(RenderData::expose(rect, UpdateMode::Gui));
             hub.send(Event::Focus(None)).ok();
@@ -263,31 +266,14 @@ impl Dictionary {
                 return;
             }
 
-            let dpi = CURRENT_DEVICE.dpi;
-            let (small_height, big_height) = (scale_by_dpi(SMALL_BAR_HEIGHT, dpi) as i32,
-                                              scale_by_dpi(BIG_BAR_HEIGHT, dpi) as i32);
-            let thickness = scale_by_dpi(THICKNESS_MEDIUM, dpi) as i32;
-            let (small_thickness, big_thickness) = halves(thickness);
-
-            let mut kb_rect = rect![self.rect.min.x,
-                                    self.rect.max.y - (small_height + 3 * big_height) as i32 + big_thickness,
-                                    self.rect.max.x,
-                                    self.rect.max.y - small_height - small_thickness];
-
             let number = id == Some(ViewId::GoToPageInput);
-            let index = locate::<BottomBar>(self).unwrap() + 1;
-
+            let index = locate::<Image>(packed).unwrap();
+            packed.insert(index, Box::new(Filler::new(rect!(0,0,0,0), BLACK)) as Box<dyn View>,
+                          Position::hfilled_bottom_left(thickness as u32), hub, rq, context);
             let keyboard = Keyboard::new(&mut kb_rect, number, context);
-            self.children.insert(index, Box::new(keyboard) as Box<dyn View>);
-
-            let separator = Filler::new(rect![self.rect.min.x, kb_rect.min.y - thickness,
-                                              self.rect.max.x, kb_rect.min.y],
-                                        BLACK);
-            self.children.insert(index, Box::new(separator) as Box<dyn View>);
-
-            for i in index..=index+1 {
-                rq.add(RenderData::new(self.child(i).id(), *self.child(i).rect(), UpdateMode::Gui));
-            }
+            let height = keyboard.rect().height();
+            packed.insert(index, Box::new(keyboard) as Box<dyn View>,
+                          Position::hfilled_bottom_left(height), hub, rq, context);
         }
     }
 

@@ -36,6 +36,15 @@ impl PackedView {
         self
     }
 
+    pub fn insert(&mut self, index: usize, view: Box<dyn View>, position: Position, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) -> &Self{
+        debug!("Inserting children of {}: {} at index {} with position {:?}", self.id(), view.id(), index, position);
+
+        self.children.insert(index, view);
+        self.positions.insert(index, position);
+        self.resize(self.rect, hub, rq, context);
+        self
+    }
+
     pub fn update_position(&mut self, index: usize, new_position: Position, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
         self.positions[index] = new_position;
         self.resize(self.rect, hub, rq, context);
@@ -122,6 +131,10 @@ impl PackedView {
                 },
                 Pack::Percent(pc) => Point::from(full_size * *pc),
                 Pack::Fill => pt!(rect_into.1.width() as i32, rect_into.1.height() as i32),
+                Pack::HFill(h) if *h <= rect_into.1.height() => pt!(rect_into.1.width() as i32, *h as i32),
+                Pack::HFill(_) => pt!(rect_into.1.width() as i32, rect_into.1.height() as i32),
+                Pack::VFill(w) if *w <= rect_into.1.width() => pt!(*w as i32, rect_into.1.height() as i32),
+                Pack::VFill(_) => pt!(rect_into.1.width() as i32, rect_into.1.height() as i32),
             };
 
             let min_x = match align {

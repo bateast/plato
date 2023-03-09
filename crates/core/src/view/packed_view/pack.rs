@@ -28,6 +28,8 @@ pub enum Pack {
     Percent(Vec2),
     /// fill available space from left top sibling to bottom right one.
     Fill,
+    HFill(u32),
+    VFill(u32),
 }
 
 #[derive(Debug)]
@@ -81,6 +83,23 @@ impl Position {
             margin: NULL_RECT,
             align: Align::Left(0),
             valign: VAlign::Top(0)
+        }
+    }
+
+    pub fn hfilled_top_left(heigh: u32) -> Self {
+        Position {
+            pack: Pack::HFill(heigh),
+            margin: NULL_RECT,
+            align: Align::Left(0),
+            valign: VAlign::Top(0)
+        }
+    }
+    pub fn hfilled_bottom_left(heigh: u32) -> Self {
+        Position {
+            pack: Pack::HFill(heigh),
+            margin: NULL_RECT,
+            align: Align::Left(0),
+            valign: VAlign::Bottom(0)
         }
     }
 }

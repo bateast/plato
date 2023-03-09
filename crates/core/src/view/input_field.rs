@@ -299,7 +299,7 @@ impl View for InputField {
 
         let dy = (self.rect.height() as i32 - x_height) / 2;
         let pt = pt!(self.rect.min.x + padding, self.rect.max.y - dy);
-        
+
         let mut index = char_position(&self.text, self.cursor).unwrap_or_else(|| self.text.chars().count());
         let lower_index = font.crop_around(&mut plan, index, max_width);
 

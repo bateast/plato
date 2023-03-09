@@ -1445,7 +1445,7 @@ impl Font {
             polarity += 1;
         }
 
-        if upper_index < len {
+        if 0 < upper_index && upper_index < len {
             width += self.ellipsis.width;
             upper_index -= 1;
             while width > max_width && upper_index > (lower_index.max(0) as usize) {
